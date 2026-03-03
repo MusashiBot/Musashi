@@ -6,6 +6,8 @@
     "build": "webpack --mode production",
     "dev": "webpack --mode development --watch",
     "clean": "rm -rf dist",
+    "matcher:eval:build": "tsc --pretty false --target ES2020 --module commonjs --moduleResolution node --esModuleInterop --outDir .tmp/matcher-eval scripts/evaluate-matcher.ts",
+    "matcher:eval": "npm run matcher:eval:build && node .tmp/matcher-eval/scripts/evaluate-matcher.js --labels scripts/data/matcher-eval-mock-markets.jsonl",
     "supabase:test": "node scripts/test-supabase-connection.mjs",
     "supabase:smoke": "node scripts/supabase-smoke-test.mjs",
     "api:start": "node server/api-server.mjs",
