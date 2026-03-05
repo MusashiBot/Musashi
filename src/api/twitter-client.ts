@@ -1,6 +1,7 @@
 // Twitter API v2 client for collecting tweets from curated accounts
 
 import { RawTweet } from '../types/feed';
+import { kv } from '@vercel/kv';
 
 // ─── Error Classes ─────────────────────────────────────────────────────────
 
@@ -72,12 +73,27 @@ export class TwitterClient {
   }
 
   /**
-   * Get Twitter user ID from username
+   * Get Twitter user ID from username (with KV caching)
    *
    * @param username - Twitter handle (without @)
    * @returns User ID
    */
   async getUserId(username: string): Promise<string> {
+    const cacheKey = `twitter:userid:${username.toLowerCase()}`;
+    const USER_ID_TTL = 7 * 24 * 60 * 60; // 7 days
+
+    try {
+      // Check KV cache first
+      const cachedId = await kv.get<string>(cacheKey);
+      if (cachedId) {
+        return cachedId;
+      }
+    } catch (kvError) {
+      console.warn(`[Twitter Client] KV cache read failed for @${username}:`, kvError);
+      // Continue to API fetch if cache fails
+    }
+
+    // Cache miss - fetch from Twitter API
     const url = `${this.baseUrl}/users/by/username/${username}`;
 
     try {
@@ -102,6 +118,12 @@ export class TwitterClient {
         console.error(`[Twitter Client] getUserId failed for @${username}: Status ${response.status}, Body: ${errorBody}`);
 
         if (response.status === 404) {
+          // User not found - clear cache if it exists (account deleted/renamed)
+          try {
+            await kv.del(cacheKey);
+          } catch {
+            // Ignore cache deletion errors
+          }
           throw new TwitterApiError(
             `User @${username} not found (suspended, deleted, or username changed)`,
             404
@@ -125,7 +147,17 @@ export class TwitterClient {
         throw new TwitterApiError(`No user data returned for @${username}`, 500);
       }
 
-      return data.data.id;
+      const userId = data.data.id;
+
+      // Store in KV cache
+      try {
+        await kv.setex(cacheKey, USER_ID_TTL, userId);
+      } catch (kvError) {
+        console.warn(`[Twitter Client] KV cache write failed for @${username}:`, kvError);
+        // Continue even if cache write fails
+      }
+
+      return userId;
     } catch (error) {
       if (error instanceof TwitterApiError) {
         throw error;
@@ -315,23 +347,3 @@ export class TwitterClient {
 // ─── Singleton Instance ────────────────────────────────────────────────────
 
 export const twitterClient = new TwitterClient();
-
-// ─── Helper Function for User ID Lookup ────────────────────────────────────
-
-// Cache user IDs to avoid repeated lookups
-const userIdCache = new Map<string, string>();
-
-export async function getUserId(username: string): Promise<string> {
-  // Check cache first
-  if (userIdCache.has(username)) {
-    return userIdCache.get(username)!;
-  }
-
-  // Fetch from Twitter API
-  const userId = await twitterClient.getUserId(username);
-
-  // Cache for future use
-  userIdCache.set(username, userId);
-
-  return userId;
-}
