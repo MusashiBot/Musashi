@@ -32,7 +32,9 @@ class MemoryCache {
     // Enforce max size
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
     }
 
     this.cache.set(key, {
@@ -43,7 +45,7 @@ class MemoryCache {
   }
 
   clear(): void {
-    this.cache.delete;
+    this.cache.clear();
   }
 }
 
@@ -62,7 +64,7 @@ export async function batchGetFromKV<T>(
 
   try {
     // Use mget for batch fetch (single request instead of N requests!)
-    const results = await kv.mget<T>(...keys);
+    const results = await kv.mget(...keys) as (T | null)[];
     return results;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
