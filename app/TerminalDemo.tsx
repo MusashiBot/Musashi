@@ -112,57 +112,55 @@ export default function TerminalDemo() {
           </div>
           <div className="font-jetbrains text-[13px] leading-[1.8] space-y-2">
             <div className={`text-[#888] transition-opacity duration-300 ${visibleLinesRight >= 1 ? 'opacity-100' : 'opacity-0'}`}>
-              <span className="text-[#888]">$</span> <span className="text-[#4a9eff]">curl</span> <span className="text-[#e0e0e0]">musashi.bot/api/analyze-text</span>
+              <span className="text-[#888]">$</span> <span className="text-[#4a9eff]">npm run agent</span>
+            </div>
+            <div className={`text-[#888] transition-opacity duration-300 ${visibleLinesRight >= 1 ? 'opacity-100' : 'opacity-0'}`}>
+              <span className="text-[#888]">$</span> <span className="text-[#4a9eff]">npm run agent</span>
             </div>
             <div className={`text-[#666] italic transition-opacity duration-300 ${visibleLinesRight >= 2 ? 'opacity-100' : 'opacity-0'}`}>
-              // Agent queries: &quot;Iran strikes Israel today&quot;
+              // Terminal UI launches - 6 panels, real-time data
             </div>
-            <div className={`mt-3 text-[#888] transition-opacity duration-300 ${visibleLinesRight >= 3 ? 'opacity-100' : 'opacity-0'}`}>
-              <span className="text-[#27c93f]">200 OK</span> <span className="text-[#666]">• 147ms</span>
+            <div className={`mt-3 p-3 bg-[#0d0d0d] border border-[#27c93f]/30 rounded text-[11px] transition-opacity duration-300 ${visibleLinesRight >= 3 ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="text-[#4a9eff]">┌─ FEED ──────────┬─ ARBITRAGE ────┐</div>
+              <div className="text-[#e0e0e0]">│ <span className="text-[#888]">@Reuters • 2m</span> │ <span className="text-[#ffbd2e]">Bitcoin Up/Down</span>│</div>
+              <div className="text-[#e0e0e0]">│ <span className="text-[#fff]">Trump ends...</span>  │ <span className="text-[#888]">YES</span>   <span className="text-[#888]">NO</span>     │</div>
+              <div className="text-[#e0e0e0]">│ <span className="text-[#ff0]">• HIGH</span> <span className="text-[#888]">• 95%</span> │ <span className="text-[#0f0]">37%</span>  <span className="text-[#f00]">64%</span>    │</div>
+              <div className="text-[#4a9eff]">├─ MOVERS ────────┼─ STATS ────────┤</div>
+              <div className="text-[#e0e0e0]">│ <span className="text-[#0f0]">↑</span> <span className="text-[#fff]">Iran Ceasefire</span>│ <span className="text-[#888]">Tweets: 124</span>   │</div>
+              <div className="text-[#e0e0e0]">│ <span className="text-[#0f0]">+12.3%</span> <span className="text-[#888]">(55→67%)</span>│ <span className="text-[#888]">Politics: 45</span>  │</div>
+              <div className="text-[#4a9eff]">└─ LOGS ──────────────────────────┘</div>
+              <div className="text-[#27c93f]">  [15:23:45] ✓ Updated: 3 new tweets</div>
+              <div className="text-[#ffbd2e]">  [15:23:40] ⚠ Found arb: 5.2% spread</div>
             </div>
-            <div className={`mt-2 p-3 bg-[#0d0d0d] border border-[#1a1a1a] rounded text-[11px] transition-opacity duration-300 ${visibleLinesRight >= 4 ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="text-[#888]">&#123;</div>
-              <div className="ml-3 text-[#4a9eff]">&quot;markets&quot;: <span className="text-[#888]">[</span></div>
-              <div className="ml-6">
-                <span className="text-[#888]">&#123;</span><span className="text-[#ffbd2e]">&quot;title&quot;</span><span className="text-[#888]">:</span> <span className="text-[#27c93f]">&quot;US/Israel strike Iran March 6?&quot;</span><span className="text-[#888]">,</span>
-              </div>
-              <div className="ml-6">
-                <span className="text-[#ffbd2e]">&quot;confidence&quot;</span><span className="text-[#888]">:</span> <span className="text-[#4a9eff]">0.95</span><span className="text-[#888]">,</span>
-              </div>
-              <div className="ml-6">
-                <span className="text-[#ffbd2e]">&quot;yesPrice&quot;</span><span className="text-[#888]">:</span> <span className="text-[#4a9eff]">0.99</span><span className="text-[#888]">,</span>
-              </div>
-              <div className="ml-6">
-                <span className="text-[#ffbd2e]">&quot;platform&quot;</span><span className="text-[#888]">:</span> <span className="text-[#27c93f]">&quot;polymarket&quot;</span>
-              </div>
-              <div className="ml-3 text-[#888]">&#125;</div>
-              <div className="ml-3 text-[#888]">],</div>
-              <div className="ml-3 text-[#4a9eff]">&quot;sentiment&quot;: <span className="text-[#888]">&#123;</span> <span className="text-[#ffbd2e]">&quot;sentiment&quot;</span><span className="text-[#888]">:</span> <span className="text-[#27c93f]">&quot;neutral&quot;</span> <span className="text-[#888]">&#125;,</span></div>
-              <div className="ml-3 text-[#4a9eff]">&quot;suggested_action&quot;: <span className="text-[#888]">&#123;</span></div>
-              <div className="ml-6">
-                <span className="text-[#ffbd2e]">&quot;direction&quot;</span><span className="text-[#888]">:</span> <span className="text-[#ff5f56]">&quot;HOLD&quot;</span><span className="text-[#888]">,</span>
-              </div>
-              <div className="ml-6">
-                <span className="text-[#ffbd2e]">&quot;edge&quot;</span><span className="text-[#888]">:</span> <span className="text-[#4a9eff]">0</span>
-              </div>
-              <div className="ml-3 text-[#888]">&#125;</div>
-              <div className="text-[#888]">&#125;</div>
+            <div className={`mt-4 text-[#666] italic transition-opacity duration-300 ${visibleLinesRight >= 4 ? 'opacity-100' : 'opacity-0'}`}>
+              // Agent sees: Feed, Arbitrage, Movers, Stats, Logs
             </div>
-            <div className={`mt-4 text-[#888] transition-opacity duration-300 ${visibleLinesRight >= 5 ? 'opacity-100' : 'opacity-0'}`}>
-              <span className="text-[#888]">$</span> <span className="text-[#4a9eff]">curl</span> <span className="text-[#e0e0e0]">musashi.bot/api/feed?urgency=critical</span>
+            <div className={`mt-3 text-[#27c93f] transition-opacity duration-300 ${visibleLinesRight >= 5 ? 'opacity-100' : 'opacity-0'}`}>
+              Polling every 5s. Parallel fetch (300ms).
             </div>
-            <div className={`mt-2 text-[#27c93f] transition-opacity duration-300 ${visibleLinesRight >= 6 ? 'opacity-100' : 'opacity-0'}`}>
-              → 3 tweets • geopolitics • urgency: critical
+            <div className={`mt-2 text-[#e0e0e0] transition-opacity duration-300 ${visibleLinesRight >= 6 ? 'opacity-100' : 'opacity-0'}`}>
+              → 10 tweets analyzed
             </div>
-            <div className={`mt-4 text-[#888] transition-opacity duration-300 ${visibleLinesRight >= 7 ? 'opacity-100' : 'opacity-0'}`}>
-              <span className="text-[#888]">$</span> <span className="text-[#4a9eff]">curl</span> <span className="text-[#e0e0e0]">musashi.bot/api/markets/arbitrage</span>
+            <div className={`text-[#e0e0e0] transition-opacity duration-300 ${visibleLinesRight >= 7 ? 'opacity-100' : 'opacity-0'}`}>
+              → 2 arbitrage opportunities (5.2%, 3.1%)
             </div>
-            <div className={`mt-2 p-3 bg-[#0d0d0d] border border-[#1a1a1a] rounded text-[11px] transition-opacity duration-300 ${visibleLinesRight >= 8 ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="text-[#888]">&#123;</div>
-              <div className="ml-3 text-[#ffbd2e]">&quot;spread&quot;</div><span className="text-[#888]">:</span> <span className="text-[#4a9eff]">0.08</span><span className="text-[#888]">,</span> <span className="text-[#666]">// 8% profit</span>
-              <div className="ml-3 text-[#ffbd2e]">&quot;direction&quot;</div><span className="text-[#888]">:</span> <span className="text-[#27c93f]">&quot;buy_kalshi_sell_poly&quot;</span><span className="text-[#888]">,</span>
-              <div className="ml-3 text-[#ffbd2e]">&quot;urgency&quot;</div><span className="text-[#888]">:</span> <span className="text-[#ff5f56]">&quot;high&quot;</span>
-              <div className="text-[#888]">&#125;</div>
+            <div className={`text-[#e0e0e0] transition-opacity duration-300 ${visibleLinesRight >= 8 ? 'opacity-100' : 'opacity-0'}`}>
+              → 4 markets moving significantly
+            </div>
+            <div className={`mt-4 text-[#666] italic transition-opacity duration-300 ${visibleLinesRight >= 9 ? 'opacity-100' : 'opacity-0'}`}>
+              // No prompts. Pure data visualization.
+            </div>
+            <div className={`mt-4 text-[#e0e0e0] transition-opacity duration-300 ${visibleLinesRight >= 10 ? 'opacity-100' : 'opacity-0'}`}>
+              Agent monitors dashboard, detects patterns.
+            </div>
+            <div className={`mt-2 text-[#27c93f] transition-opacity duration-300 ${visibleLinesRight >= 11 ? 'opacity-100' : 'opacity-0'}`}>
+              → PolyDepth-style YES/NO splits
+            </div>
+            <div className={`mt-2 text-[#27c93f] transition-opacity duration-300 ${visibleLinesRight >= 12 ? 'opacity-100' : 'opacity-0'}`}>
+              → Color-coded urgency (critical, high, medium)
+            </div>
+            <div className={`mt-5 transition-opacity duration-300 ${visibleLinesRight >= 13 ? 'opacity-100' : 'opacity-0'}`}>
+              <span className="text-[#888]">Agent:</span> <span className="text-[#27c93f]">*executes trade on 5.2% spread*</span>
             </div>
             <div className={`mt-4 text-[#666] italic transition-opacity duration-300 ${visibleLinesRight >= 9 ? 'opacity-100' : 'opacity-0'}`}>
               // Agent parses JSON, executes trades autonomously
