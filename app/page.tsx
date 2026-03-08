@@ -148,6 +148,9 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Terminal Demo Section */}
+      <TerminalDemo />
+
       {/* Before/After Slider Section */}
       <section id="see-the-difference" className="flex flex-col items-center gap-12 w-full px-[120px] py-[100px] bg-[var(--bg-primary)]">
         <div className="flex flex-col items-center gap-4">
@@ -223,9 +226,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* Terminal Demo Section */}
-      <TerminalDemo />
 
       {/* Features Section */}
       <section className="flex flex-col items-center gap-16 w-full px-[120px] py-[100px] bg-[var(--bg-primary)]">
