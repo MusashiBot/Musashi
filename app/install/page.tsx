@@ -93,7 +93,7 @@ export default function Install() {
               Chrome 90+ • Edge • Brave • Opera
             </span>
             <span className="font-jetbrains text-[var(--text-tertiary)] text-[11px] font-normal text-center">
-              650+ markets from Polymarket and Kalshi • Updates every 30 seconds
+              900+ markets from Polymarket and Kalshi • Price updates every 60 seconds
             </span>
           </div>
 

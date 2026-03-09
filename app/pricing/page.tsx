@@ -47,7 +47,7 @@ export default function Pricing() {
               Chrome Extension • No account needed • Works instantly
             </span>
             <span className="font-jetbrains text-[var(--text-tertiary)] text-[11px] font-normal text-center">
-              650+ markets from Polymarket and Kalshi • Updates every 30s
+              900+ markets from Polymarket and Kalshi • Price updates every 60s
             </span>
           </div>
 

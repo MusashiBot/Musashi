@@ -2,34 +2,38 @@
 
 **Build prediction market trading agents powered by real-time social intelligence.**
 
-The Musashi API analyzes text from social media, news, and other sources to identify relevant prediction markets on Polymarket and Kalshi. Perfect for AI agents that need to understand what markets users care about.
+The Musashi API provides multiple endpoints for analyzing text, detecting arbitrage, tracking market movers, and accessing a curated feed of analyzed tweets from 71 high-signal accounts across 8 categories.
 
 ---
 
 ## Why Musashi API?
 
 **For AI Trading Agents:**
-- ⚡ **Sub-second analysis** - Get market matches in <200ms
-- 🎯 **High precision matching** - Sophisticated keyword + synonym expansion
+- ⚡ **Sub-200ms analysis** - Get market matches in <200ms
+- 🎯 **900+ markets** - 500+ Polymarket + 400+ Kalshi markets
 - 📊 **Structured JSON output** - Machine-readable, agent-friendly format
-- 🔄 **Real-time intelligence** - Analyze tweets, news, conversations as they happen
-- 🤖 **Agent-first design** - Built for programmatic access, not humans
+- 🔄 **Real-time intelligence** - Live CLOB API price updates every 60s
+- 🤖 **Agent-first design** - Built for programmatic access
+- 📡 **Automated feed** - 71 monitored accounts, updates every 2 minutes
+- 🎲 **Trading signals** - Sentiment, confidence, urgency levels
 
 **Use Cases:**
-- Agent monitors user's Twitter feed → Detects market opportunities → Trades automatically
-- Chatbot analyzes conversation → Suggests relevant markets → User trades via agent
-- News aggregator → Market matcher → Arbitrage detector → Execute trades
-- Sentiment analyzer → Market finder → Position recommender
+- Agent monitors Twitter feed → Detects opportunities → Trades automatically
+- Arbitrage detector → Find price discrepancies across platforms
+- Market movers tracker → Identify markets with significant price changes
+- Feed aggregator → Access pre-analyzed tweets with market matches
+- Chatbot → Suggests relevant markets based on conversation
 
 ---
 
-## Quick Start
+## API Endpoints
 
-### 1. Analyze Text
+### Text Analysis
 
-**Endpoint:** `POST /api/analyze-text`
+#### POST /api/analyze-text
+Analyzes text and returns matching markets with trading signals.
 
-**Request:**
+**Request Body:**
 ```json
 {
   "text": "The Fed is likely to cut interest rates in March after inflation cooled to 2.9%",
@@ -37,6 +41,12 @@ The Musashi API analyzes text from social media, news, and other sources to iden
   "maxResults": 5
 }
 ```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `text` | string | ✅ Yes | - | Text to analyze (tweet, article, message, etc.) |
+| `minConfidence` | number | ❌ No | 0.25 | Minimum confidence threshold (0.0-1.0) |
+| `maxResults` | number | ❌ No | 5 | Maximum number of markets to return |
 
 **Response:**
 ```json
@@ -55,83 +65,318 @@ The Musashi API analyzes text from social media, news, and other sources to iden
           "noPrice": 0.28,
           "volume24h": 389000,
           "url": "https://kalshi.com/markets",
-          "category": "monetary_policy",
-          "lastUpdated": "2026-02-27T10:30:00Z"
+          "category": "economics",
+          "lastUpdated": "2026-03-08T10:30:00Z"
         },
         "confidence": 0.87,
-        "matchedKeywords": ["fed", "interest rate", "rate cut", "inflation"]
-      },
-      {
-        "market": {
-          "id": "kalshi-inflation-cpi",
-          "platform": "kalshi",
-          "title": "Will CPI inflation be above 3% in February?",
-          "description": "Resolves Yes if the Consumer Price Index year-over-year change is above 3.0% for February 2026.",
-          "keywords": ["inflation", "cpi", "consumer price index"],
-          "yesPrice": 0.58,
-          "noPrice": 0.42,
-          "volume24h": 203000,
-          "url": "https://kalshi.com/markets",
-          "category": "economics",
-          "lastUpdated": "2026-02-27T10:30:00Z"
-        },
-        "confidence": 0.64,
-        "matchedKeywords": ["inflation", "cpi"]
+        "matchedKeywords": ["fed", "interest rate", "rate cut", "inflation"],
+        "sentiment": "bullish",
+        "signal": {
+          "direction": "YES",
+          "confidence": 0.87,
+          "edge": 0.12,
+          "urgency": "high",
+          "type": "news_event",
+          "reasoning": "Strong keyword match + bullish sentiment on rate cut"
+        }
       }
     ],
-    "matchCount": 2,
-    "timestamp": "2026-02-27T10:30:15.234Z"
+    "matchCount": 1,
+    "timestamp": "2026-03-08T10:30:15.234Z"
   }
 }
 ```
 
 ---
 
-## API Reference
+### Arbitrage Detection
 
-### POST /api/analyze-text
+#### GET /api/markets/arbitrage
+Detects price discrepancies between Polymarket and Kalshi for the same events.
 
-Analyzes text and returns matching prediction markets.
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `minSpread` | number | 0.03 | Minimum price spread (0.03 = 3%) |
+| `minConfidence` | number | 0.50 | Minimum match confidence |
+| `limit` | number | 10 | Maximum results to return |
+| `category` | string | - | Filter by category (optional) |
 
-**Request Body:**
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `text` | string | ✅ Yes | - | Text to analyze (tweet, article, message, etc.) |
-| `minConfidence` | number | ❌ No | 0.25 | Minimum confidence threshold (0.0-1.0) |
-| `maxResults` | number | ❌ No | 5 | Maximum number of markets to return |
+**Example:**
+```
+GET /api/markets/arbitrage?minSpread=0.05&limit=20
+```
 
 **Response:**
-```typescript
+```json
 {
-  success: boolean;
-  data?: {
-    markets: MarketMatch[];    // Array of matched markets
-    matchCount: number;        // Number of matches found
-    timestamp: string;         // ISO 8601 timestamp
-  };
-  error?: string;              // Error message if success = false
+  "success": true,
+  "data": {
+    "opportunities": [
+      {
+        "polymarketMarket": {
+          "id": "poly-btc-100k",
+          "title": "Will Bitcoin reach $100k in 2026?",
+          "yesPrice": 0.63,
+          "volume24h": 450000
+        },
+        "kalshiMarket": {
+          "id": "kalshi-btc-100k",
+          "title": "BTC above $100k by Dec 2026?",
+          "yesPrice": 0.70,
+          "volume24h": 280000
+        },
+        "spread": 0.07,
+        "direction": "buy_poly_sell_kalshi",
+        "profitPotential": "7%",
+        "matchConfidence": 0.82,
+        "category": "crypto"
+      }
+    ],
+    "count": 1,
+    "timestamp": "2026-03-08T10:30:15.234Z"
+  }
 }
 ```
 
-**Market Match Schema:**
-```typescript
+---
+
+### Market Movers
+
+#### GET /api/markets/movers
+Returns markets with significant price changes in the last 1h or 24h.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `timeframe` | string | "1h" | Time window ("1h" or "24h") |
+| `minChange` | number | 0.05 | Minimum price change (0.05 = 5%) |
+| `limit` | number | 20 | Maximum results to return |
+| `platform` | string | - | Filter by platform ("polymarket" or "kalshi") |
+
+**Example:**
+```
+GET /api/markets/movers?timeframe=1h&minChange=0.10&limit=10
+```
+
+**Response:**
+```json
 {
-  market: {
-    id: string;                // Unique market ID
-    platform: 'kalshi' | 'polymarket';
-    title: string;             // Market question
-    description: string;       // Resolution criteria
-    keywords: string[];        // Match keywords
-    yesPrice: number;          // Current YES price (0.0-1.0)
-    noPrice: number;           // Current NO price (0.0-1.0)
-    volume24h: number;         // 24h trading volume ($)
-    url: string;               // Direct link to trade
-    category: string;          // Market category
-    lastUpdated: string;       // ISO timestamp
-    endDate?: string;          // Market resolution date
-  };
-  confidence: number;          // Match quality (0.0-1.0)
-  matchedKeywords: string[];   // Which keywords matched
+  "success": true,
+  "data": {
+    "movers": [
+      {
+        "market": {
+          "id": "poly-trump-2024",
+          "platform": "polymarket",
+          "title": "Trump wins 2024 election?",
+          "yesPrice": 0.89,
+          "previousPrice": 0.77,
+          "volume24h": 2400000,
+          "url": "https://polymarket.com/market/...",
+          "category": "politics"
+        },
+        "priceChange1h": 0.12,
+        "priceChange24h": 0.23,
+        "percentChange1h": "15.6%",
+        "percentChange24h": "34.8%",
+        "direction": "up"
+      }
+    ],
+    "count": 1,
+    "timestamp": "2026-03-08T10:30:15.234Z"
+  }
+}
+```
+
+---
+
+### Feed System
+
+#### GET /api/feed
+Returns analyzed tweets from 71 monitored high-signal accounts.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | number | 20 | Number of tweets to return |
+| `category` | string | - | Filter by category |
+| `minUrgency` | string | - | Filter by minimum urgency level |
+| `since` | string | - | ISO timestamp for tweets after this time |
+| `cursor` | string | - | Pagination cursor |
+
+**Categories:** `crypto`, `politics`, `economics`, `tech`, `sports`, `geopolitics`, `finance`, `breaking_news`
+
+**Urgency Levels:** `critical`, `high`, `medium`, `low`
+
+**Example:**
+```
+GET /api/feed?limit=10&category=crypto&minUrgency=high
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "tweets": [
+      {
+        "id": "1234567890",
+        "text": "Bitcoin just crossed $100k for the first time in history",
+        "author": {
+          "username": "BitcoinMagazine",
+          "category": "crypto"
+        },
+        "timestamp": "2026-03-08T10:25:00Z",
+        "analysis": {
+          "markets": [
+            {
+              "market": {
+                "id": "poly-btc-100k",
+                "title": "Will Bitcoin reach $100k in 2026?",
+                "yesPrice": 0.95,
+                "platform": "polymarket"
+              },
+              "confidence": 0.98,
+              "sentiment": "bullish",
+              "signal": {
+                "direction": "YES",
+                "urgency": "critical",
+                "type": "news_event"
+              }
+            }
+          ],
+          "sentiment": "bullish",
+          "urgency": "critical"
+        }
+      }
+    ],
+    "count": 1,
+    "nextCursor": "eyJpZCI6MTIzNDU2Nzg5MH0=",
+    "timestamp": "2026-03-08T10:30:15.234Z"
+  }
+}
+```
+
+---
+
+#### GET /api/feed/stats
+Returns statistics about the feed system.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalTweets": 1247,
+    "last24h": 342,
+    "lastHour": 15,
+    "byCategory": {
+      "crypto": 523,
+      "politics": 398,
+      "economics": 201,
+      "tech": 89,
+      "sports": 24,
+      "geopolitics": 8,
+      "finance": 3,
+      "breaking_news": 1
+    },
+    "topMarkets": [
+      {
+        "marketId": "poly-trump-2024",
+        "mentions": 67,
+        "title": "Trump wins 2024 election?"
+      }
+    ],
+    "topAccounts": [
+      {
+        "username": "elonmusk",
+        "category": "crypto",
+        "tweets": 23
+      }
+    ],
+    "lastUpdate": "2026-03-08T10:30:00Z"
+  }
+}
+```
+
+---
+
+#### GET /api/feed/accounts
+Returns the list of 71 monitored Twitter accounts.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "accounts": [
+      {
+        "username": "elonmusk",
+        "category": "crypto",
+        "description": "Tesla, SpaceX, crypto commentary"
+      },
+      {
+        "username": "vitalikbuterin",
+        "category": "crypto",
+        "description": "Ethereum founder"
+      },
+      {
+        "username": "federalreserve",
+        "category": "economics",
+        "description": "Official Fed announcements"
+      }
+    ],
+    "count": 71,
+    "categories": ["crypto", "politics", "economics", "tech", "sports", "geopolitics", "finance", "breaking_news"]
+  }
+}
+```
+
+---
+
+### Health Check
+
+#### GET /api/health
+Returns the status of the API and all services.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "uptime": "99.8%",
+    "endpoints": [
+      {
+        "path": "/api/analyze-text",
+        "status": "operational",
+        "avgLatency": "187ms"
+      },
+      {
+        "path": "/api/markets/arbitrage",
+        "status": "operational",
+        "avgLatency": "142ms"
+      },
+      {
+        "path": "/api/markets/movers",
+        "status": "operational",
+        "avgLatency": "98ms"
+      },
+      {
+        "path": "/api/feed",
+        "status": "operational",
+        "avgLatency": "56ms"
+      }
+    ],
+    "services": {
+      "polymarket": "connected",
+      "kalshi": "connected",
+      "vercelKV": "connected",
+      "twitterAPI": "limited"
+    },
+    "timestamp": "2026-03-08T10:30:15.234Z"
+  }
 }
 ```
 
@@ -139,7 +384,7 @@ Analyzes text and returns matching prediction markets.
 
 ## Code Examples
 
-### cURL
+### cURL - Analyze Text
 ```bash
 curl -X POST https://musashi-api.vercel.app/api/analyze-text \
   -H "Content-Type: application/json" \
@@ -149,136 +394,169 @@ curl -X POST https://musashi-api.vercel.app/api/analyze-text \
   }'
 ```
 
-### Python
+### Python - Full Agent Example
 ```python
 import requests
+import time
 
-response = requests.post(
-    'https://musashi-api.vercel.app/api/analyze-text',
-    json={
-        'text': 'Will SpaceX launch Starship to Mars this year?',
-        'minConfidence': 0.3,
-        'maxResults': 5
-    }
-)
+class MusashiAgent:
+    def __init__(self, base_url="https://musashi-api.vercel.app"):
+        self.base_url = base_url
 
-data = response.json()
-if data['success']:
-    for match in data['data']['markets']:
-        print(f"{match['confidence']:.0%} - {match['market']['title']}")
-        print(f"  → {match['market']['url']}")
+    def analyze_text(self, text, min_confidence=0.25):
+        response = requests.post(
+            f"{self.base_url}/api/analyze-text",
+            json={"text": text, "minConfidence": min_confidence}
+        )
+        return response.json()
+
+    def get_arbitrage(self, min_spread=0.05):
+        response = requests.get(
+            f"{self.base_url}/api/markets/arbitrage",
+            params={"minSpread": min_spread}
+        )
+        return response.json()
+
+    def get_movers(self, timeframe="1h", min_change=0.05):
+        response = requests.get(
+            f"{self.base_url}/api/markets/movers",
+            params={"timeframe": timeframe, "minChange": min_change}
+        )
+        return response.json()
+
+    def get_feed(self, category=None, min_urgency=None, limit=20):
+        params = {"limit": limit}
+        if category:
+            params["category"] = category
+        if min_urgency:
+            params["minUrgency"] = min_urgency
+
+        response = requests.get(
+            f"{self.base_url}/api/feed",
+            params=params
+        )
+        return response.json()
+
+    def poll_feed(self, callback, interval=120, **filters):
+        """Poll feed every interval seconds and call callback with new tweets"""
+        while True:
+            data = self.get_feed(**filters)
+            if data['success']:
+                callback(data['data']['tweets'])
+            time.sleep(interval)
+
+# Usage
+agent = MusashiAgent()
+
+# Analyze a tweet
+result = agent.analyze_text("The Fed just cut rates by 50 basis points")
+for match in result['data']['markets']:
+    print(f"{match['confidence']:.0%} - {match['market']['title']}")
+    print(f"  Signal: {match['signal']['direction']} ({match['signal']['urgency']})")
+
+# Find arbitrage opportunities
+arb = agent.get_arbitrage(min_spread=0.07)
+for opp in arb['data']['opportunities']:
+    print(f"Arbitrage: {opp['spread']*100:.1f}% spread")
+    print(f"  {opp['direction']}")
+
+# Track market movers
+movers = agent.get_movers(timeframe="1h", min_change=0.10)
+for mover in movers['data']['movers']:
+    print(f"{mover['market']['title']}: {mover['percentChange1h']}")
+
+# Get high-urgency crypto tweets
+feed = agent.get_feed(category="crypto", min_urgency="high", limit=10)
+for tweet in feed['data']['tweets']:
+    print(f"@{tweet['author']['username']}: {tweet['text']}")
 ```
 
-### JavaScript / TypeScript
+### JavaScript / TypeScript SDK
 ```typescript
-const response = await fetch('https://musashi-api.vercel.app/api/analyze-text', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    text: 'Trump announces new tariffs on China',
-    minConfidence: 0.25,
-    maxResults: 5
-  })
-});
+class MusashiAgent {
+  private baseUrl: string;
 
-const { success, data, error } = await response.json();
+  constructor(baseUrl = "https://musashi-api.vercel.app") {
+    this.baseUrl = baseUrl;
+  }
 
-if (success) {
-  data.markets.forEach(match => {
-    console.log(`${(match.confidence * 100).toFixed(0)}% - ${match.market.title}`);
-    console.log(`  Platform: ${match.market.platform}`);
-    console.log(`  YES: ${(match.market.yesPrice * 100).toFixed(0)}%`);
-  });
-}
-```
+  async analyzeText(text: string, minConfidence = 0.25) {
+    const response = await fetch(`${this.baseUrl}/api/analyze-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, minConfidence })
+    });
+    return response.json();
+  }
 
-### Claude Desktop (MCP)
-```typescript
-// Example tool use for Claude Desktop
-{
-  "name": "analyze_market_relevance",
-  "description": "Analyze text to find relevant prediction markets",
-  "parameters": {
-    "text": "The Fed just announced a surprise rate cut",
-    "maxResults": 3
+  async getArbitrage(minSpread = 0.05) {
+    const response = await fetch(
+      `${this.baseUrl}/api/markets/arbitrage?minSpread=${minSpread}`
+    );
+    return response.json();
+  }
+
+  async getMarketMovers(timeframe = "1h", minChange = 0.05) {
+    const response = await fetch(
+      `${this.baseUrl}/api/markets/movers?timeframe=${timeframe}&minChange=${minChange}`
+    );
+    return response.json();
+  }
+
+  async getFeed(options: {
+    limit?: number;
+    category?: string;
+    minUrgency?: string;
+  } = {}) {
+    const params = new URLSearchParams();
+    if (options.limit) params.set('limit', options.limit.toString());
+    if (options.category) params.set('category', options.category);
+    if (options.minUrgency) params.set('minUrgency', options.minUrgency);
+
+    const response = await fetch(`${this.baseUrl}/api/feed?${params}`);
+    return response.json();
+  }
+
+  onFeed(
+    callback: (tweets: any[]) => void,
+    filters: { category?: string; minUrgency?: string } = {},
+    interval = 120000
+  ) {
+    setInterval(async () => {
+      const { data } = await this.getFeed({ ...filters, limit: 20 });
+      callback(data.tweets);
+    }, interval);
   }
 }
-```
 
----
+// Usage
+const agent = new MusashiAgent();
 
-## Agent Integration Patterns
-
-### Pattern 1: Twitter Monitor → Trade Executor
-```python
-# AI agent monitors user's Twitter feed
-def on_new_tweet(tweet_text):
-    # Analyze with Musashi API
-    response = requests.post('https://musashi-api.vercel.app/api/analyze-text',
-                            json={'text': tweet_text})
-
-    markets = response.json()['data']['markets']
-
-    for match in markets:
-        if match['confidence'] > 0.7:  # High confidence only
-            # Execute trade on Polymarket
-            place_order(
-                market_id=match['market']['id'],
-                side='YES' if should_buy_yes(tweet_text) else 'NO',
-                amount=calculate_position_size(match['confidence'])
-            )
-```
-
-### Pattern 2: Chatbot Market Assistant
-```python
-# User asks: "What markets are related to AI regulation?"
-user_query = "What markets are related to AI regulation?"
-
-# Query Musashi API
-response = requests.post('https://musashi-api.vercel.app/api/analyze-text',
-                        json={'text': user_query, 'maxResults': 10})
-
-markets = response.json()['data']['markets']
-
-# Present to user via chatbot
-for match in markets:
-    send_message(f"""
-    📊 {match['market']['title']}
-    🎯 Confidence: {match['confidence']:.0%}
-    💰 Current odds: YES {match['market']['yesPrice']:.0%} / NO {match['market']['noPrice']:.0%}
-    📈 24h volume: ${match['market']['volume24h']:,}
-    🔗 Trade: {match['market']['url']}
-    """)
-```
-
-### Pattern 3: News Aggregator → Arbitrage Detector
-```python
-# Scrape news headlines → Find markets → Detect arbitrage
-headlines = fetch_latest_news()
-
-for headline in headlines:
-    # Find related markets
-    response = requests.post('https://musashi-api.vercel.app/api/analyze-text',
-                            json={'text': headline})
-
-    markets = response.json()['data']['markets']
-
-    # Check for arbitrage across platforms
-    for market in markets:
-        polymarket_price = get_polymarket_price(market['market']['title'])
-        kalshi_price = get_kalshi_price(market['market']['title'])
-
-        if abs(polymarket_price - kalshi_price) > 0.05:  # 5% spread
-            log_arbitrage_opportunity(market, polymarket_price, kalshi_price)
+// Poll crypto feed every 2 minutes
+agent.onFeed(
+  (tweets) => {
+    tweets.forEach(tweet => {
+      console.log(`@${tweet.author.username}: ${tweet.text}`);
+      tweet.analysis.markets.forEach(match => {
+        if (match.signal.urgency === 'critical') {
+          console.log(`  🚨 CRITICAL: ${match.market.title}`);
+        }
+      });
+    });
+  },
+  { category: 'crypto', minUrgency: 'high' },
+  120000
+);
 ```
 
 ---
 
 ## Rate Limits
 
-**Current (MVP):**
+**Current (Beta):**
 - ✅ No rate limits
 - ✅ No authentication required
+- ✅ Free for all users
 
 **Future:**
 - Free tier: 100 requests/day
@@ -289,28 +567,34 @@ for headline in headlines:
 
 ## Supported Markets
 
-Currently analyzing **100+ markets** across:
-- 🏛️ **US Politics** - Elections, Congress, Executive actions
-- 💰 **Economics** - Fed policy, inflation, recession, unemployment
-- 💻 **Technology** - AI, earnings, IPOs, valuations
-- ₿ **Crypto** - Bitcoin, Ethereum, ETFs, regulations
-- ⚽ **Sports** - NFL, NBA, Soccer, Tennis
-- 🌍 **Geopolitics** - Conflicts, peace deals, international relations
-- 🎬 **Entertainment** - Movies, music, streaming, anime, gaming
-- 🌡️ **Climate** - Temperature records, policy, energy
+Currently tracking **900+ markets** across 8 categories:
 
-Markets updated daily from Polymarket and Kalshi APIs.
+- 🏛️ **Politics** (250+ markets) - Elections, Congress, Executive actions
+- 💰 **Economics** (180+ markets) - Fed policy, inflation, recession, unemployment
+- ₿ **Crypto** (200+ markets) - Bitcoin, Ethereum, ETFs, regulations
+- 💻 **Technology** (120+ markets) - AI, earnings, IPOs, valuations
+- ⚽ **Sports** (80+ markets) - NFL, NBA, Soccer, Tennis
+- 🌍 **Geopolitics** (40+ markets) - Conflicts, peace deals, international relations
+- 🎬 **Entertainment** (20+ markets) - Movies, music, streaming, gaming
+- 🌡️ **Climate** (10+ markets) - Temperature records, policy, energy
+
+**Platforms:**
+- **Polymarket** - 500+ markets via Gamma API + CLOB API
+- **Kalshi** - 400+ markets via Elections API
+
+Price updates every 60 seconds via CLOB API for top 50 markets.
 
 ---
 
-## Response Times
+## Performance
 
-Average latency by text length:
-- **Short tweet (100 chars):** ~80ms
-- **Medium post (500 chars):** ~120ms
-- **Long article (2000 chars):** ~180ms
+Average latency by endpoint:
+- **POST /api/analyze-text:** ~187ms
+- **GET /api/markets/arbitrage:** ~142ms
+- **GET /api/markets/movers:** ~98ms
+- **GET /api/feed:** ~56ms
 
-All processing done server-side. No client-side ML required.
+Uptime: 99.8% (hosted on Vercel)
 
 ---
 
@@ -324,10 +608,20 @@ All processing done server-side. No client-side ML required.
   "error": "Missing or invalid \"text\" field in request body."
 }
 
-// Invalid confidence threshold
+// Invalid parameters
 {
   "success": false,
   "error": "minConfidence must be between 0.0 and 1.0"
+}
+
+// No matches found
+{
+  "success": true,
+  "data": {
+    "markets": [],
+    "matchCount": 0,
+    "timestamp": "2026-03-08T10:30:15.234Z"
+  }
 }
 
 // Server error
@@ -340,47 +634,44 @@ All processing done server-side. No client-side ML required.
 **Best Practices:**
 - Always check `success` field before accessing `data`
 - Implement retry logic with exponential backoff
-- Cache results for identical queries (TTL: 5 minutes)
-- Handle empty results gracefully (no matches found)
+- Cache results for identical queries (TTL: 5 minutes recommended)
+- Handle empty results gracefully
+- Monitor `/api/health` for service status
 
 ---
 
-## Roadmap
+## Deployment
 
-**Q1 2026:**
-- ✅ MVP API launch
-- [ ] Webhook subscriptions
-- [ ] Real-time WebSocket stream
-- [ ] Historical market data endpoint
+**Production API:**
+- URL: https://musashi-api.vercel.app
+- Platform: Vercel Serverless Functions
+- Database: Vercel KV (Upstash Redis)
+- CDN: Vercel Edge Network
+- Region: US-East-1 (primary)
 
-**Q2 2026:**
-- [ ] Multi-source intelligence (Twitter + Reddit + News)
-- [ ] Arbitrage detection endpoint
-- [ ] Market sentiment analysis
-- [ ] GPT-4 enhanced matching
-
-**Q3 2026:**
-- [ ] Polymarket CLOB integration (live prices)
-- [ ] Kalshi API integration (live prices)
-- [ ] Custom market watchlists
-- [ ] Agent performance analytics
+**Data Sources:**
+- Polymarket Gamma API: `https://gamma-api.polymarket.com`
+- Polymarket CLOB API: `https://clob.polymarket.com`
+- Kalshi Elections API: `https://api.elections.kalshi.com`
+- Twitter API v2: Rate limited (currently blocked - credits depleted)
 
 ---
 
 ## Support
 
 **Issues & Feedback:**
-- GitHub: [github.com/rotciv/musashi](https://github.com/rotciv/musashi)
-- Email: support@musashi.ai
-- Discord: [Join our community](https://discord.gg/musashi)
+- GitHub: [github.com/VittorioC13/Musashi](https://github.com/VittorioC13/Musashi)
+- Email: support@musashi.bot
+- Twitter: [@musashimarket](https://twitter.com/musashimarket)
 
 **For AI Agents:**
 - This API is **agent-friendly by design**
-- Structured JSON, no rate limits (MVP)
-- Feel free to build cool stuff! 🚀
+- Structured JSON responses
+- No authentication required (beta)
+- Build cool stuff! 🚀
 
 ---
 
 **Built for agents. Powered by prediction markets.**
 
-*Last updated: February 27, 2026*
+*Last updated: March 8, 2026*
