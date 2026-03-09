@@ -39,9 +39,26 @@ function pushLog(level, message) {
 
 async function fetchJson(path) {
   const url = `${API_BASE_URL}${path}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  let res;
+  try {
+    res = await fetch(url, { headers: { Accept: 'application/json' } });
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(`${path} -> network error: ${cause}`);
+  }
+
   if (!res.ok) {
-    throw new Error(`${path} -> HTTP ${res.status}`);
+    let body = '';
+    try {
+      body = await res.text();
+    } catch {
+      body = '<unreadable response body>';
+    }
+    const compactBody = body.replace(/\s+/g, ' ').trim();
+    const preview = compactBody.length > 280 ? `${compactBody.slice(0, 280)}...` : compactBody;
+    throw new Error(
+      `${path} -> HTTP ${res.status} ${res.statusText || ''} | body: ${preview || '<empty>'}`
+    );
   }
   return res.json();
 }
@@ -83,14 +100,36 @@ function pickTopMover(moversJson) {
   };
 }
 
+function getBoxWidth() {
+  const columns = process.stdout.columns || 100;
+  return Math.max(60, Math.min(columns - 2, 140));
+}
+
+function wrapLine(line, width) {
+  const visibleMax = width - 4;
+  if (line.length <= visibleMax) return [line];
+
+  const chunks = [];
+  let remaining = line;
+  while (remaining.length > visibleMax) {
+    let cut = remaining.lastIndexOf(' ', visibleMax);
+    if (cut < Math.floor(visibleMax * 0.5)) {
+      cut = visibleMax;
+    }
+    chunks.push(remaining.slice(0, cut).trimEnd());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
+}
+
 function box(title, lines, color = 'green') {
-  const width = 54;
+  const width = getBoxWidth();
   const top = c(`+${'-'.repeat(width - 2)}+`, color);
   const head = c(`| ${title.padEnd(width - 4)} |`, color);
-  const body = lines.map((line) => {
-    const clean = line.length > width - 4 ? line.slice(0, width - 7) + '...' : line;
-    return `| ${clean.padEnd(width - 4)} |`;
-  });
+  const body = lines.flatMap((line) =>
+    wrapLine(line, width).map((wrapped) => `| ${wrapped.padEnd(width - 4)} |`)
+  );
   const bottom = c(`+${'-'.repeat(width - 2)}+`, color);
   return [top, head, top, ...body, bottom].join('\n');
 }
