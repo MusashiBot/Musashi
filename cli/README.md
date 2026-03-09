@@ -64,6 +64,9 @@ MUSASHI_CLI_LOG_LINES=20 npm run agent
 
 # Optional: feed page size (default: 10)
 MUSASHI_CLI_FEED_LIMIT=20 npm run agent
+
+# Optional: arbitrage and movers thresholds
+MUSASHI_CLI_MIN_ARB_SPREAD=0.01 MUSASHI_CLI_MIN_MOVER_CHANGE=0.03 npm run agent
 ```
 
 Defaults in code:

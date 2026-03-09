@@ -7,7 +7,7 @@
 import blessed from 'blessed';
 import { AppState } from '../app-state';
 import { BaseComponent } from './base';
-import { formatPrice, formatPriceChange, getPriceChangeColor, getArrow, truncate } from '../utils';
+import { formatPrice, formatPriceChange, getPriceChangeColor, getArrow } from '../utils';
 
 export class MoversPanel extends BaseComponent {
   constructor(screen: blessed.Widgets.Screen) {
@@ -22,6 +22,7 @@ export class MoversPanel extends BaseComponent {
       style: {
         border: { fg: 'magenta' },
       },
+      wrap: true,
       scrollable: true,
       alwaysScroll: true,
     });
@@ -31,7 +32,7 @@ export class MoversPanel extends BaseComponent {
   }
 
   render(state: AppState) {
-    const movers = state.movers.slice(0, 4); // Show top 4 movers
+    const movers = state.movers.slice(0, 2); // Show fewer items so full market title can be displayed
 
     if (movers.length === 0) {
       this.box.setContent('{gray-fg}No significant price movements...\nMinimum change: ' + (state.settings.minMoverChange * 100) + '%{/gray-fg}');
@@ -41,7 +42,7 @@ export class MoversPanel extends BaseComponent {
     const lines: string[] = [];
 
     movers.forEach(mover => {
-      const title = truncate(mover.market.title, 35);
+      const title = mover.market.title;
       const change = formatPriceChange(mover.priceChange1h);
       const prevPrice = formatPrice(mover.previousPrice);
       const currPrice = formatPrice(mover.currentPrice);

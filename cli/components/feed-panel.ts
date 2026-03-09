@@ -7,7 +7,7 @@
 import blessed from 'blessed';
 import { AppState } from '../app-state';
 import { BaseComponent } from './base';
-import { formatTimeAgo, getUrgencyColor, truncate } from '../utils';
+import { formatTimeAgo, getUrgencyColor } from '../utils';
 
 export class FeedPanel extends BaseComponent {
   constructor(screen: blessed.Widgets.Screen) {
@@ -22,6 +22,7 @@ export class FeedPanel extends BaseComponent {
       style: {
         border: { fg: 'green' },
       },
+      wrap: true,
       scrollable: true,
       alwaysScroll: true,
     });
@@ -31,7 +32,7 @@ export class FeedPanel extends BaseComponent {
   }
 
   render(state: AppState) {
-    const tweets = state.feed.slice(0, 5); // Show top 5 tweets
+    const tweets = state.feed.slice(0, 3); // Show fewer items so full text can be displayed
 
     if (tweets.length === 0) {
       this.box.setContent('{gray-fg}No tweets in feed yet...\nWaiting for data...{/gray-fg}');
@@ -47,7 +48,7 @@ export class FeedPanel extends BaseComponent {
 
       const timeAgo = formatTimeAgo(tweet.tweet.created_at);
       const urgencyColor = getUrgencyColor(tweet.urgency);
-      const text = truncate(tweet.tweet.text.replace(/\n/g, ' '), 40);
+      const text = tweet.tweet.text.replace(/\n/g, ' ');
       const confidence = Math.round(tweet.confidence * 100);
 
       lines.push(`{bold}@${tweet.tweet.author}{/bold} {gray-fg}•{/gray-fg} ${timeAgo}`);

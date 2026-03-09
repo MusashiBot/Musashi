@@ -29,6 +29,8 @@ class MusashiCLI {
     const pollInterval = this.readIntEnv('MUSASHI_CLI_POLL_MS', 10000, 1000);
     const feedLimit = this.readIntEnv('MUSASHI_CLI_FEED_LIMIT', 10, 1);
     const logLines = this.readIntEnv('MUSASHI_CLI_LOG_LINES', 10, 1);
+    const minArbSpread = this.readFloatEnv('MUSASHI_CLI_MIN_ARB_SPREAD', 0.02, 0, 1);
+    const minMoverChange = this.readFloatEnv('MUSASHI_CLI_MIN_MOVER_CHANGE', 0.05, 0, 1);
 
     // Initialize blessed screen
     this.screen = blessed.screen({
@@ -52,8 +54,8 @@ class MusashiCLI {
       logs: [],
       settings: {
         pollInterval,            // default: 10 seconds
-        minArbSpread: 0.02,      // 2%
-        minMoverChange: 0.05,    // 5%
+        minArbSpread,
+        minMoverChange,
         feedLimit,
         logLines,
       },
@@ -237,6 +239,16 @@ class MusashiCLI {
     if (!raw) return fallback;
     const parsed = Number.parseInt(raw, 10);
     if (Number.isNaN(parsed) || parsed < min) {
+      return fallback;
+    }
+    return parsed;
+  }
+
+  private readFloatEnv(name: string, fallback: number, min: number, max: number): number {
+    const raw = process.env[name];
+    if (!raw) return fallback;
+    const parsed = Number.parseFloat(raw);
+    if (Number.isNaN(parsed) || parsed < min || parsed > max) {
       return fallback;
     }
     return parsed;
