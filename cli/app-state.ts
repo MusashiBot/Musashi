@@ -62,5 +62,6 @@ export interface AppState {
     minArbSpread: number;      // 0.02 = 2%
     minMoverChange: number;    // 0.05 = 5%
     feedLimit: number;         // tweets to show
+    logLines: number;          // logs to show in panel
   };
 }

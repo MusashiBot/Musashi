@@ -53,16 +53,25 @@ npm run agent:start
 
 ## Configuration
 
-Edit settings in `cli/index.ts`:
+Configure via environment variables (recommended):
 
-```typescript
-settings: {
-  pollInterval: 5000,      // 5 seconds
-  minArbSpread: 0.02,      // 2% minimum spread
-  minMoverChange: 0.05,    // 5% minimum price change
-  feedLimit: 10,           // tweets to fetch
-}
+```bash
+# Refresh interval in milliseconds (default: 10000)
+MUSASHI_CLI_POLL_MS=15000 npm run agent
+
+# Number of log lines shown in Logs panel (default: 10)
+MUSASHI_CLI_LOG_LINES=20 npm run agent
+
+# Optional: feed page size (default: 10)
+MUSASHI_CLI_FEED_LIMIT=20 npm run agent
 ```
+
+Defaults in code:
+- `pollInterval`: 10000ms (10s)
+- `logLines`: 10
+- `feedLimit`: 10
+- `minArbSpread`: 0.02
+- `minMoverChange`: 0.05
 
 ## API Endpoints Used
 

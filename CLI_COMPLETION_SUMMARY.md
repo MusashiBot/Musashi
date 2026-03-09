@@ -100,6 +100,10 @@ Total: 10 files, 776 lines
 npm run agent
 ```
 
+```bash
+MUSASHI_CLI_POLL_MS=15000 MUSASHI_CLI_LOG_LINES=20 npm run agent
+```
+
 ### Production Build
 ```bash
 npm run agent:build

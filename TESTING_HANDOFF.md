@@ -491,6 +491,13 @@ Test these and verify performance:
 ```bash
 # Add -w to see response time
 curl -w "\nTime: %{time_total}s\n" "https://musashi-api.vercel.app/api/health"
+
+curl -i https://musashi-api.vercel.app/api/health
+curl -i "https://musashi-api.vercel.app/api/feed?limit=5"
+curl -i https://musashi-api.vercel.app/api/feed/stats
+curl -i "https://musashi-api.vercel.app/api/markets/arbitrage?minSpread=0.02"
+curl -i "https://musashi-api.vercel.app/api/markets/movers?minChange=0.05"
+
 ```
 
 ---

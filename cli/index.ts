@@ -26,6 +26,10 @@ class MusashiCLI {
   private isPolling: boolean = false;
 
   constructor() {
+    const pollInterval = this.readIntEnv('MUSASHI_CLI_POLL_MS', 10000, 1000);
+    const feedLimit = this.readIntEnv('MUSASHI_CLI_FEED_LIMIT', 10, 1);
+    const logLines = this.readIntEnv('MUSASHI_CLI_LOG_LINES', 10, 1);
+
     // Initialize blessed screen
     this.screen = blessed.screen({
       smartCSR: true,
@@ -47,10 +51,11 @@ class MusashiCLI {
       errors: [],
       logs: [],
       settings: {
-        pollInterval: 5000,      // 5 seconds
+        pollInterval,            // default: 10 seconds
         minArbSpread: 0.02,      // 2%
         minMoverChange: 0.05,    // 5%
-        feedLimit: 10,
+        feedLimit,
+        logLines,
       },
     };
 
@@ -61,7 +66,7 @@ class MusashiCLI {
       new ArbitragePanel(this.screen),
       new MoversPanel(this.screen),
       new StatsPanel(this.screen),
-      new LogsPanel(this.screen),
+      new LogsPanel(this.screen, logLines),
     ];
 
     // Keyboard shortcuts
@@ -102,7 +107,8 @@ class MusashiCLI {
     });
 
     const entry = { message, level, time: timestamp };
-    const newLogs = [...this.state.logs, entry].slice(-20); // Keep last 20
+    const maxLogBuffer = Math.max(50, this.state.settings.logLines * 10);
+    const newLogs = [...this.state.logs, entry].slice(-maxLogBuffer);
     this.updateState({ logs: newLogs });
   }
 
@@ -118,41 +124,76 @@ class MusashiCLI {
       this.isPolling = true;
       this.updateState({ isLoading: true });
 
-      // Parallel fetch (fast!)
-      const [feed, feedStats, arbitrage, movers] = await Promise.all([
-        this.agent.getFeed({ limit: this.state.settings.feedLimit }).catch(() => []),
-        this.agent.getFeedStats().catch(() => null),
+      // Parallel fetch with explicit per-endpoint error handling.
+      const [feedResult, statsResult, arbResult, moversResult] = await Promise.allSettled([
+        this.agent.getFeed({ limit: this.state.settings.feedLimit }),
+        this.agent.getFeedStats(),
         this.agent.getArbitrage({
           minSpread: this.state.settings.minArbSpread,
           limit: 5,
-        }).catch(() => []),
+        }),
         this.agent.getMovers({
           timeframe: '1h',
           minChange: this.state.settings.minMoverChange,
           limit: 5,
-        }).catch(() => []),
+        }),
       ]);
 
-      // Update state
+      const endpointErrors: string[] = [];
+      const collectError = (endpoint: string, result: PromiseSettledResult<unknown>) => {
+        if (result.status === 'rejected') {
+          const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          endpointErrors.push(`${endpoint}: ${msg}`);
+          this.addLog(`${endpoint} failed: ${msg}`, 'error');
+        }
+      };
+      const collectSuccess = (
+        endpoint: string,
+        result: PromiseSettledResult<unknown>,
+        formatValue: (value: unknown) => string
+      ) => {
+        if (result.status === 'fulfilled') {
+          this.addLog(`${endpoint} ok: ${formatValue(result.value)}`, 'success');
+        }
+      };
+
+      collectError('feed', feedResult);
+      collectError('stats', statsResult);
+      collectError('arbitrage', arbResult);
+      collectError('movers', moversResult);
+
+      collectSuccess('feed', feedResult, (value) => `${(value as unknown[]).length} items`);
+      collectSuccess('stats', statsResult, () => 'loaded');
+      collectSuccess('arbitrage', arbResult, (value) => `${(value as unknown[]).length} opportunities`);
+      collectSuccess('movers', moversResult, (value) => `${(value as unknown[]).length} movers`);
+
+      // Keep previous successful data when a specific endpoint fails.
+      const nextFeed = feedResult.status === 'fulfilled' ? feedResult.value : this.state.feed;
+      const nextStats = statsResult.status === 'fulfilled' ? statsResult.value : this.state.feedStats;
+      const nextArb = arbResult.status === 'fulfilled' ? arbResult.value : this.state.arbitrage;
+      const nextMovers = moversResult.status === 'fulfilled' ? moversResult.value : this.state.movers;
+
       this.updateState({
-        feed,
-        feedStats,
-        arbitrage,
-        movers,
+        feed: nextFeed,
+        feedStats: nextStats,
+        arbitrage: nextArb,
+        movers: nextMovers,
         lastUpdate: new Date().toISOString(),
         isLoading: false,
-        errors: [],
+        errors: endpointErrors,
       });
 
       // Log success
-      const newTweets = feed.length;
-      const newArbs = arbitrage.length;
-      const newMovers = movers.length;
+      const newTweets = nextFeed.length;
+      const newArbs = nextArb.length;
+      const newMovers = nextMovers.length;
 
       if (newTweets > 0 || newArbs > 0 || newMovers > 0) {
         this.addLog(`Updated: ${newTweets} tweets, ${newArbs} arbs, ${newMovers} movers`, 'success');
-      } else {
+      } else if (endpointErrors.length === 0) {
         this.addLog('Updated: No new data', 'info');
+      } else {
+        this.addLog(`Updated with ${endpointErrors.length} endpoint error(s)`, 'warn');
       }
 
     } catch (error) {
@@ -171,6 +212,7 @@ class MusashiCLI {
   start() {
     this.addLog('Musashi CLI started', 'success');
     this.addLog(`Polling every ${this.state.settings.pollInterval / 1000}s`, 'info');
+    this.addLog(`Showing ${this.state.settings.logLines} log lines`, 'info');
     this.addLog('API: https://musashi-api.vercel.app', 'info');
 
     // Initial poll
@@ -188,6 +230,16 @@ class MusashiCLI {
       clearInterval(this.pollTimer);
     }
     this.addLog('Stopped polling', 'info');
+  }
+
+  private readIntEnv(name: string, fallback: number, min: number): number {
+    const raw = process.env[name];
+    if (!raw) return fallback;
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isNaN(parsed) || parsed < min) {
+      return fallback;
+    }
+    return parsed;
   }
 }
 

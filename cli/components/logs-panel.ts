@@ -10,12 +10,15 @@ import { BaseComponent } from './base';
 import { getLogColor, getLogIcon } from '../utils';
 
 export class LogsPanel extends BaseComponent {
-  constructor(screen: blessed.Widgets.Screen) {
+  constructor(screen: blessed.Widgets.Screen, visibleLines: number) {
+    const contentLines = Math.max(4, visibleLines);
+    const panelHeight = contentLines + 2; // +2 for top/bottom border
+
     const container = blessed.box({
       top: 30,
       left: 0,
       width: '100%',
-      height: 6,
+      height: panelHeight,
       border: { type: 'line' },
       label: ' Logs ',
       tags: true,
@@ -31,7 +34,7 @@ export class LogsPanel extends BaseComponent {
   }
 
   render(state: AppState) {
-    const logs = state.logs.slice(-5); // Show last 5 logs
+    const logs = state.logs.slice(-state.settings.logLines);
 
     if (logs.length === 0) {
       this.box.setContent('{gray-fg}No logs yet...{/gray-fg}');
