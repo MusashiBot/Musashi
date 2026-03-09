@@ -5,6 +5,7 @@ import { KeywordMatcher } from '../../src/analysis/keyword-matcher';
 import { analyzeSentiment } from '../../src/analysis/sentiment-analyzer';
 import { generateSignal } from '../../src/analysis/signal-generator';
 import { getMarkets, getArbitrage } from '../lib/market-cache';
+import { batchGetFromKV } from '../lib/cache-helper';
 import {
   TWITTER_ACCOUNTS,
   getHighPriorityAccounts,
@@ -301,10 +302,10 @@ async function updateFeedIndices(): Promise<void> {
     const tweetKeys = await kv.keys('tweet:*');
     const tweetIds = tweetKeys.map(key => key.replace('tweet:', ''));
 
-    // Fetch all tweets to build indices
-    const tweets = await Promise.all(
-      tweetIds.map(id => kv.get<AnalyzedTweet>(getTweetKey(id)))
-    );
+    // OPTIMIZED: Batch fetch all tweets using mget instead of individual gets
+    // This reduces N requests → 1 request
+    const allTweetKeys = tweetIds.map(id => getTweetKey(id));
+    const tweets = await batchGetFromKV<AnalyzedTweet>(kv, allTweetKeys);
 
     const validTweets = tweets.filter(t => t !== null) as AnalyzedTweet[];
 

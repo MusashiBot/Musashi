@@ -19,8 +19,8 @@ const CACHE_TTL_MS        = 5 * 60 * 1000; // 5 minutes (reduced from 30)
 const NETWORK_RULESET_ID = 'ruleset_1';
 
 // Price polling configuration
-const PRICE_POLL_INTERVAL_MS = 60 * 1000; // Poll every 60 seconds
-const TOP_MARKETS_COUNT = 50; // Track top 50 markets by volume
+const PRICE_POLL_INTERVAL_MS = 5 * 60 * 1000; // Poll every 5 minutes (reduced from 60s to save CPU)
+const TOP_MARKETS_COUNT = 20; // Track top 20 markets by volume (reduced from 50 to save resources)
 
 console.log('[Musashi SW] Service worker initialized');
 
@@ -320,20 +320,20 @@ function startPricePolling() {
     clearInterval(pricePollingInterval);
   }
 
-  console.log('[Musashi SW] Starting price polling (60s interval)');
+  console.log('[Musashi SW] Starting price polling (5min interval)');
 
   // Poll immediately
   pollTopMarketPrices();
 
-  // Then poll every 60 seconds
+  // Then poll every 5 minutes
   pricePollingInterval = setInterval(() => {
     pollTopMarketPrices();
   }, PRICE_POLL_INTERVAL_MS);
 
-  // Cleanup old history every hour
+  // Cleanup old history every 6 hours (reduced frequency)
   setInterval(() => {
     cleanupOldHistory();
-  }, 60 * 60 * 1000);
+  }, 6 * 60 * 60 * 1000);
 }
 
 /**

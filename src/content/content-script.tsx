@@ -11,6 +11,44 @@ import '../sidebar/sidebar.css';
 
 console.log('[Musashi] Content script loaded');
 
+// ── Performance Optimization: Tweet text cache to avoid re-analyzing ──────────
+interface CachedAnalysis {
+  matches: MarketMatch[];
+  timestamp: number;
+}
+
+const analyzedTweetCache = new Map<string, CachedAnalysis>();
+const CACHE_MAX_SIZE = 100; // Keep last 100 analyzed tweets
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function getCachedAnalysis(text: string): MarketMatch[] | null {
+  const cached = analyzedTweetCache.get(text);
+  if (!cached) return null;
+
+  // Check if cache is still valid
+  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
+    analyzedTweetCache.delete(text);
+    return null;
+  }
+
+  return cached.matches;
+}
+
+function setCachedAnalysis(text: string, matches: MarketMatch[]): void {
+  // Simple LRU: if cache is full, remove oldest entry
+  if (analyzedTweetCache.size >= CACHE_MAX_SIZE) {
+    const firstKey = analyzedTweetCache.keys().next().value;
+    if (firstKey !== undefined) {
+      analyzedTweetCache.delete(firstKey);
+    }
+  }
+
+  analyzedTweetCache.set(text, {
+    matches,
+    timestamp: Date.now()
+  });
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const isTwitter =
@@ -24,6 +62,17 @@ if (!isTwitter) {
 
   const extractor = new TwitterExtractor();
   let allMatches: MarketMatch[] = [];
+  let isTabVisible = !document.hidden;
+
+  // Performance optimization: Pause processing when tab is not visible
+  document.addEventListener('visibilitychange', () => {
+    isTabVisible = !document.hidden;
+    if (isTabVisible) {
+      console.log('[Musashi] Tab visible - resuming processing');
+    } else {
+      console.log('[Musashi] Tab hidden - pausing processing to save CPU');
+    }
+  });
 
   // Watch for Twitter theme changes (user toggling Dim / Lights Out / Default mid-session)
   let lastTheme = detectTwitterTheme();
@@ -73,6 +122,12 @@ if (!isTwitter) {
 
     setTimeout(() => {
       extractor.start(async (tweets: Tweet[]) => {
+        // Skip processing if tab is not visible to save CPU
+        if (!isTabVisible) {
+          console.log(`[Musashi] Tab hidden - skipping ${tweets.length} tweets`);
+          return;
+        }
+
         console.log(`[Musashi] Scanned ${tweets.length} tweet(s)`);
         let injected = 0;
 
@@ -83,15 +138,24 @@ if (!isTwitter) {
             continue; // Card already exists, skip
           }
 
-          // Get matches from API or local matcher
-          let matches: MarketMatch[] = [];
-          if (useLocalMatcher && localMatcher) {
-            matches = localMatcher.match(tweet.text);
+          // Check cache first to avoid re-analyzing same tweet
+          let matches: MarketMatch[] | null = getCachedAnalysis(tweet.text);
+
+          if (matches === null) {
+            // Cache miss - analyze the tweet
+            if (useLocalMatcher && localMatcher) {
+              matches = localMatcher.match(tweet.text);
+            } else {
+              matches = await musashiApi.analyzeText(tweet.text, {
+                minConfidence: 0.25,
+                maxResults: 5,
+              });
+            }
+            // Store in cache
+            setCachedAnalysis(tweet.text, matches);
           } else {
-            matches = await musashiApi.analyzeText(tweet.text, {
-              minConfidence: 0.25,
-              maxResults: 5,
-            });
+            // Cache hit - saved an API call / computation
+            console.log('[Musashi] Cache hit - reusing analysis');
           }
 
           if (matches.length > 0) {

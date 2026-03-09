@@ -1,10 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { kv } from '@vercel/kv';
 import type { AnalyzedTweet, FeedResponse, AccountCategory } from '../src/types/feed';
+import { batchGetFromKV, setFeedCache, getFeedCache, getFeedCacheTimestamp } from './lib/cache-helper';
 
 // ─── KV Storage Keys ───────────────────────────────────────────────────────
 
 const FEED_LATEST_KEY = 'feed:latest';
+const FEED_CACHE_KEY_PREFIX = 'feed_memory_';
 
 function getTweetKey(tweetId: string): string {
   return `tweet:${tweetId}`;
@@ -49,6 +51,9 @@ export default async function handler(
     const minUrgency = req.query.minUrgency as string | undefined;
     const since = req.query.since as string | undefined;
     const cursor = req.query.cursor as string | undefined;
+
+    // Build cache key for in-memory fallback
+    const cacheKey = `${FEED_CACHE_KEY_PREFIX}${category || 'all'}_${minUrgency || 'all'}_${limit}`;
 
     // Validate parameters
     if (limit < 1 || limit > 100) {
@@ -118,10 +123,10 @@ export default async function handler(
     // Step 3: Slice for limit
     const tweetIds = feedIndex.slice(startIndex, startIndex + limit);
 
-    // Step 4: Batch fetch tweets from KV
-    const tweets = await Promise.all(
-      tweetIds.map(id => kv.get<AnalyzedTweet>(getTweetKey(id)))
-    );
+    // Step 4: OPTIMIZED: Batch fetch tweets from KV using mget
+    // This reduces N requests → 1 request (massive improvement!)
+    const tweetKeys = tweetIds.map(id => getTweetKey(id));
+    const tweets = await batchGetFromKV<AnalyzedTweet>(kv, tweetKeys);
 
     // Step 5: Filter nulls (expired tweets)
     let validTweets = tweets.filter(t => t !== null) as AnalyzedTweet[];
@@ -166,22 +171,61 @@ export default async function handler(
         metadata: {
           processing_time_ms: Date.now() - startTime,
           total_in_kv: feedIndex.length,
+          cached: false,  // Indicates fresh data from KV
         },
       },
     };
 
-    // Cache for 30 seconds at edge
-    res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate');
+    // Cache successful response in memory for fallback
+    setFeedCache(cacheKey, response, 5 * 60 * 1000); // 5 min TTL
+
+    // Cache for 60 seconds at edge with stale-while-revalidate
+    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
     res.status(200).json(response);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Feed API] Error:', errorMessage);
 
     const isKVError = errorMessage.includes('KV') || errorMessage.includes('Redis');
+    const isQuotaError = errorMessage.includes('quota') || errorMessage.includes('max requests limit');
 
-    res.status(500).json({
+    // Fallback to in-memory cache on quota error
+    if (isQuotaError) {
+      // Parse query parameters again (they're in try block scope)
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const category = req.query.category as AccountCategory | undefined;
+      const minUrgency = req.query.minUrgency as string | undefined;
+      const cacheKey = `${FEED_CACHE_KEY_PREFIX}${category || 'all'}_${minUrgency || 'all'}_${limit}`;
+
+      const cachedResponse = getFeedCache(cacheKey);
+      const cachedAt = getFeedCacheTimestamp(cacheKey);
+
+      if (cachedResponse) {
+        // Modify response to indicate it's cached
+        const fallbackResponse = {
+          ...cachedResponse,
+          data: {
+            ...cachedResponse.data,
+            metadata: {
+              ...cachedResponse.data.metadata,
+              cached: true,
+              cached_at: cachedAt ? new Date(cachedAt).toISOString() : null,
+              cache_age_seconds: cachedAt ? Math.floor((Date.now() - cachedAt) / 1000) : null,
+            },
+          },
+        };
+
+        console.log(`[Feed API] Serving cached feed (age: ${fallbackResponse.data.metadata.cache_age_seconds}s)`);
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        res.status(200).json(fallbackResponse);
+        return;
+      }
+    }
+
+    // No cache available, return error
+    res.status(isQuotaError ? 503 : 500).json({
       success: false,
-      error: errorMessage,
+      error: isQuotaError ? 'Service temporarily unavailable due to quota limits. No cached data available.' : errorMessage,
       ...(isKVError && {
         note: 'Vercel KV storage error. Ensure KV_REST_API_URL and KV_REST_API_TOKEN are set.',
       }),

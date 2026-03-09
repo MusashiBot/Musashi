@@ -82,6 +82,9 @@ export interface FeedResponse {
     metadata: {
       processing_time_ms: number;
       total_in_kv: number;    // Approximate total tweets in KV
+      cached?: boolean;        // True if served from in-memory cache
+      cached_at?: string | null;  // ISO timestamp when data was cached
+      cache_age_seconds?: number | null; // Age of cached data in seconds
     };
   };
 }
@@ -104,6 +107,9 @@ export interface FeedStats {
     }>;
     metadata: {
       processing_time_ms: number;
+      cached?: boolean;        // True if served from in-memory cache
+      cached_at?: string | null;  // ISO timestamp when data was cached
+      cache_age_seconds?: number | null; // Age of cached data in seconds
     };
   };
 }

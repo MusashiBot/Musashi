@@ -6,12 +6,14 @@ interface TwitterNativeCardProps {
   market: Market;
   confidence: number;
   tweetText?: string;
+  matchedKeywords?: string[];
 }
 
 const TwitterNativeCard: React.FC<TwitterNativeCardProps> = ({
   market,
   confidence,
   tweetText,
+  matchedKeywords = [],
 }) => {
   const [barWidth, setBarWidth] = useState(0); // starts at 0 for entry animation
 
@@ -97,9 +99,10 @@ const TwitterNativeCard: React.FC<TwitterNativeCardProps> = ({
       </div>
 
       {/* Market Title */}
-      <h3 className="text-sm font-normal text-gray-900 leading-snug mb-3">
+      <h3 className="text-sm font-normal text-gray-900 leading-snug mb-2">
         {market.title}
       </h3>
+
 
       {/* Odds Display */}
       <div className="flex items-center gap-4 mb-2">

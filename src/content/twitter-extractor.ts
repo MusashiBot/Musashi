@@ -105,7 +105,7 @@ export class TwitterExtractor {
   }
 
   /**
-   * Schedule batch processing (wait 2 seconds to collect tweets)
+   * Schedule batch processing (wait 3 seconds to collect tweets for better batching)
    */
   private scheduleBatchProcessing(): void {
     if (this.processingTimer) {
@@ -115,7 +115,7 @@ export class TwitterExtractor {
     this.processingTimer = window.setTimeout(() => {
       this.processBatch();
       this.processingTimer = null;
-    }, 2000);
+    }, 3000); // Increased from 2s to 3s to batch more tweets together
   }
 
   /**
