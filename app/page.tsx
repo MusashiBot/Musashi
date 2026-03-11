@@ -1,9 +1,15 @@
+'use client';
+
+import { useState } from 'react';
 import Image from "next/image";
 import TerminalDemo from "./TerminalDemo";
 import SmoothScrollLink from "./components/SmoothScrollLink";
 import FAQ from "./components/FAQ";
+import InstallCodeReveal from "./components/InstallCodeReveal";
 
 export default function Home() {
+  const [showInstallCode, setShowInstallCode] = useState(false);
+
   return (
     <div className="flex flex-col w-full bg-[var(--bg-primary)]">
       {/* Header */}
@@ -16,9 +22,12 @@ export default function Home() {
           <a href="/pricing" className="font-jetbrains text-[var(--text-secondary)] text-xs font-medium hover:text-[var(--text-primary)] transition-colors">PRICING</a>
           <a href="/privacy" className="font-jetbrains text-[var(--text-secondary)] text-xs font-medium hover:text-[var(--text-primary)] transition-colors">PRIVACY</a>
         </nav>
-        <a href="/ai" className="px-5 py-[10px] border border-[#FFFFFF40] bg-transparent hover:bg-[var(--overlay-light)] transition-colors">
-          <span className="font-jetbrains text-[var(--text-primary)] text-xs font-bold">API Docs</span>
-        </a>
+        <button
+          onClick={() => setShowInstallCode(!showInstallCode)}
+          className="px-5 py-[10px] border border-[#FFFFFF40] bg-transparent hover:bg-[var(--overlay-light)] transition-colors"
+        >
+          <span className="font-jetbrains text-[var(--text-primary)] text-xs font-bold">Install</span>
+        </button>
       </header>
 
       {/* Hero Section */}
@@ -53,8 +62,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Hero Figure - Musashi Image with Market Data Overlays */}
-        <div className="absolute right-0 top-0 w-[860px] h-[860px] pointer-events-none">
+        {/* Hero Figure - Musashi Image / Install Code */}
+        <InstallCodeReveal showCode={showInstallCode} />
           <div className="relative w-full h-full bg-black">
             <Image
               src="/images/generated-1771830449125.png"
