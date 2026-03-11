@@ -22,12 +22,6 @@ export default function Home() {
           <a href="/pricing" className="font-jetbrains text-[var(--text-secondary)] text-xs font-medium hover:text-[var(--text-primary)] transition-colors">PRICING</a>
           <a href="/privacy" className="font-jetbrains text-[var(--text-secondary)] text-xs font-medium hover:text-[var(--text-primary)] transition-colors">PRIVACY</a>
         </nav>
-        <button
-          onClick={() => setShowInstallCode(!showInstallCode)}
-          className="px-5 py-[10px] border border-[#FFFFFF40] bg-transparent hover:bg-[var(--overlay-light)] transition-colors"
-        >
-          <span className="font-jetbrains text-[var(--text-primary)] text-xs font-bold">Install</span>
-        </button>
       </header>
 
       {/* Hero Section */}
@@ -49,9 +43,12 @@ export default function Home() {
           {/* CTA Buttons */}
           <div className="flex flex-col gap-3">
             <div className="flex gap-4">
-              <a href="/ai" className="px-8 py-[14px] bg-[var(--text-primary)] hover:opacity-90 transition-opacity">
-                <span className="font-jetbrains text-[var(--bg-primary)] text-xs font-bold">View API Docs</span>
-              </a>
+              <button
+                onClick={() => setShowInstallCode(!showInstallCode)}
+                className="px-8 py-[14px] bg-[var(--text-primary)] hover:opacity-90 transition-opacity"
+              >
+                <span className="font-jetbrains text-[var(--bg-primary)] text-xs font-bold">Install</span>
+              </button>
               <SmoothScrollLink targetId="see-the-difference" className="px-8 py-[14px] bg-[var(--overlay-light)] border border-[var(--border-lighter)] hover:bg-[var(--overlay-lighter)] transition-colors">
                 <span className="font-jetbrains text-[var(--text-primary)] text-xs font-bold">See Demo</span>
               </SmoothScrollLink>
