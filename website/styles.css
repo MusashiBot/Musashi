@@ -119,6 +119,13 @@ main {
     background-clip: text;
 }
 
+.tagline {
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    margin-top: 2rem;
+    font-weight: 400;
+}
+
 /* ============================================
    COMPARISON SECTION
    ============================================ */
