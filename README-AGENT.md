@@ -161,10 +161,35 @@ Run the broader contract test suite:
 npm run agent:test:api
 ```
 
-Useful overrides:
+Common scenarios:
 
 ```bash
+# 1) Regular regression check against production.
+npm run agent:test:api
+
+# 2) Test a local API before deploy.
 MUSASHI_API_BASE_URL=http://127.0.0.1:3000 npm run agent:test:api
+
+# 3) Run performance checks.
+# Includes warm-latency sampling and the best-effort cold-start probe.
+npm run agent:test:api:perf
+
+# 4) Run stress checks.
+# Includes concurrency and burst traffic coverage.
+npm run agent:test:api:stress
+
+# 5) Run everything in one pass.
+npm run agent:test:api:full
+
+# 6) Performance tuning.
+# Increase idle time or sample count for a less noisy cold-start estimate.
+MUSASHI_TEST_COLD_IDLE_MS=65000 MUSASHI_TEST_COLD_SAMPLES=3 npm run agent:test:api:perf
+
+# 7) Stress tuning.
+# Raise concurrency and burst size when you intentionally want a heavier load.
+MUSASHI_TEST_CONCURRENCY=20 MUSASHI_TEST_BURST_REQUESTS=50 npm run agent:test:api:stress
+
+# 8) Slower environments or deployed usage-audit checks.
 MUSASHI_TEST_TIMEOUT_MS=30000 npm run agent:test:api
 API_USAGE_ADMIN_KEY=your-key npm run agent:test:api
 ```
@@ -172,15 +197,34 @@ API_USAGE_ADMIN_KEY=your-key npm run agent:test:api
 What it covers:
 - Happy-path checks for `health`, `analyze-text`, `arbitrage`, `movers`, `feed`, `feed/stats`, and `feed/accounts`
 - SDK smoke test via `MusashiAgent`
-- Method guards such as `GET /api/analyze-text -> 405`
-- Validation failures such as bad numeric thresholds, invalid categories, invalid urgency, and oversize text
-- Contract edge cases such as malformed `since` timestamps and degraded `503` health/data responses
+- Public endpoint method matrix checks for `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS`
+- Schema validation for response payloads, array item shapes, timestamps, enums, counts, and filter echoing
+- Validation failures such as bad numeric thresholds, invalid categories, invalid urgency, malformed timestamps, duplicate query params, and oversize text
+- Hostile-input coverage for empty strings, whitespace-only text, HTML payloads, injection-like payloads, Unicode, control characters, malformed JSON, and wrong content types
+- Feed-specific behavior such as cursor pagination, repeated-request stability, cache headers, and oversized or special `x-client-id` values
 - Optional usage-audit verification when `API_USAGE_ADMIN_KEY` is present
+- Optional performance mode that includes both warm-latency benchmarks and best-effort cold-start probing
+- Optional concurrency and burst traffic checks when stress mode is enabled
 
 How to read results:
 - `PASS`: endpoint behavior matches the expected contract
 - `WARN`: behavior is usable but degraded or environment-dependent (for example upstream `503`)
 - `FAIL`: contract mismatch, bad status code, malformed payload, timeout, or network failure
+
+Cold-start note:
+- `npm run agent:test:api:perf` includes both warm benchmarks and a best-effort cold-start probe
+- The cold-start probe is still a client-side approximation, not proof that the serverless runtime truly cold-started
+- The probe waits idle, measures one request, then immediately measures a follow-up request on the same endpoint
+- Useful outputs are `cold_avg`, `warm_avg`, and `delta`
+- Increase `MUSASHI_TEST_COLD_IDLE_MS` if you want to bias more strongly toward cold-start behavior
+- Increase `MUSASHI_TEST_COLD_SAMPLES` for a less noisy average, at the cost of longer runtime
+
+Recommended workflow:
+- Use plain `npm run agent:test:api` for regular regression checks
+- Use `npm run agent:test:api:perf` when you want both warm-latency and cold-start measurements
+- Use `npm run agent:test:api:stress` only when you intentionally want concurrency and burst coverage
+- Use `npm run agent:test:api:full` when you want contract, perf, and stress in one run
+- Treat repeated `WARN`/`FAIL` results as contract gaps in the deployed API, not as flaky test noise
 
 ## Repository Pointers
 

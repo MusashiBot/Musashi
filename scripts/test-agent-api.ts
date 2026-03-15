@@ -19,11 +19,16 @@ const BASE_URL = (process.env.MUSASHI_API_BASE_URL || 'https://musashi-api.verce
 const ADMIN_KEY = process.env.API_USAGE_ADMIN_KEY;
 const CLIENT_ID = process.env.MUSASHI_TEST_CLIENT_ID || `agent-api-test-${Date.now()}`;
 const TIMEOUT_MS = readIntEnv('MUSASHI_TEST_TIMEOUT_MS', 15000);
-const LATENCY_SAMPLE_SIZE = readIntEnv('MUSASHI_TEST_LATENCY_SAMPLES', 5);
-const INCLUDE_BENCHMARKS = process.env.MUSASHI_TEST_INCLUDE_BENCHMARKS === '1';
+const LATENCY_SAMPLE_SIZE = readIntEnv('MUSASHI_TEST_LATENCY_SAMPLES', 20);
+const INCLUDE_PERF =
+  process.env.MUSASHI_TEST_INCLUDE_PERF === '1' ||
+  process.env.MUSASHI_TEST_INCLUDE_BENCHMARKS === '1' ||
+  process.env.MUSASHI_TEST_INCLUDE_COLD_START === '1';
+const COLD_IDLE_MS = readIntEnv('MUSASHI_TEST_COLD_IDLE_MS', 10000);
+const COLD_SAMPLE_SIZE = readIntEnv('MUSASHI_TEST_COLD_SAMPLES', 10);
 const INCLUDE_STRESS = process.env.MUSASHI_TEST_INCLUDE_STRESS === '1';
-const CONCURRENCY_LEVEL = readIntEnv('MUSASHI_TEST_CONCURRENCY', 10);
-const BURST_REQUESTS = readIntEnv('MUSASHI_TEST_BURST_REQUESTS', 25);
+const CONCURRENCY_LEVEL = readIntEnv('MUSASHI_TEST_CONCURRENCY', 20);
+const BURST_REQUESTS = readIntEnv('MUSASHI_TEST_BURST_REQUESTS', 50);
 
 async function main(): Promise<void> {
   const tests: Array<{ name: string; run: () => Promise<CaseResult> }> = [
@@ -90,8 +95,9 @@ async function main(): Promise<void> {
     tests.push({ name: 'usage audit rejects missing admin key', run: testUsageAuditMissingAdminKey });
   }
 
-  if (INCLUDE_BENCHMARKS) {
+  if (INCLUDE_PERF) {
     tests.push({ name: 'warm latency benchmark', run: testWarmLatencyBenchmark });
+    tests.push({ name: 'best-effort cold start probe', run: testColdStartProbe });
   }
 
   if (INCLUDE_STRESS) {
@@ -984,6 +990,62 @@ async function testWarmLatencyBenchmark(): Promise<CaseResult> {
   return sawWarning ? warn(summaries.join('; ')) : pass(summaries.join('; '));
 }
 
+async function testColdStartProbe(): Promise<CaseResult> {
+  const cases = [
+    { label: 'health', path: '/api/health', options: undefined },
+    {
+      label: 'analyze-text',
+      path: '/api/analyze-text',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ text: 'Cold start probe for Bitcoin CPI odds', maxResults: 3 }),
+      },
+    },
+  ] as const;
+
+  const summaries: string[] = [];
+  let sawWarning = false;
+
+  for (const entry of cases) {
+    const coldSamples: number[] = [];
+    const warmSamples: number[] = [];
+
+    for (let i = 0; i < COLD_SAMPLE_SIZE; i++) {
+      if (i > 0) {
+        await sleep(COLD_IDLE_MS);
+      }
+
+      const cold = await request(entry.path, entry.options);
+      if (![200, 503].includes(cold.status)) {
+        return fail(`${entry.label} cold probe got status ${cold.status}`);
+      }
+
+      const warm = await request(entry.path, entry.options);
+      if (![200, 503].includes(warm.status)) {
+        return fail(`${entry.label} warm follow-up got status ${warm.status}`);
+      }
+
+      coldSamples.push(cold.durationMs);
+      warmSamples.push(warm.durationMs);
+    }
+
+    const coldStats = summarizeLatencies(coldSamples);
+    const warmStats = summarizeLatencies(warmSamples);
+    const delta = coldStats.avg - warmStats.avg;
+    summaries.push(
+      `${entry.label} cold_avg=${coldStats.avg}ms warm_avg=${warmStats.avg}ms delta=${delta}ms idle=${COLD_IDLE_MS}ms samples=${COLD_SAMPLE_SIZE}`,
+    );
+
+    if (delta < 0) {
+      sawWarning = true;
+    }
+  }
+
+  return sawWarning
+    ? warn(`best-effort only: ${summaries.join('; ')}`)
+    : pass(`best-effort only: ${summaries.join('; ')}`);
+}
+
 async function testConcurrentRequestStability(): Promise<CaseResult> {
   const requests = Array.from({ length: CONCURRENCY_LEVEL }, (_, index) =>
     request(`/api/feed?limit=2&category=${index % 2 === 0 ? 'crypto' : 'politics'}`, {
@@ -1124,6 +1186,10 @@ function readIntEnv(name: string, fallback: number): number {
 
   const parsed = Number.parseInt(raw, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function buildMethodMatrixRequest(method: string, path: string): RequestInit {
