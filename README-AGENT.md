@@ -226,6 +226,20 @@ Recommended workflow:
 - Use `npm run agent:test:api:full` when you want contract, perf, and stress in one run
 - Treat repeated `WARN`/`FAIL` results as contract gaps in the deployed API, not as flaky test noise
 
+CI / deployment automation:
+- GitHub Actions automatically runs `agent:test:api` on `testing` branch pushes and on pull requests
+- Successful Vercel preview deployments also trigger `agent:test:api` against the preview `environment_url`, so the deployed build is tested instead of only the default API base URL
+- A weekly scheduled workflow runs `agent:test:api:perf`
+- `stress` and `full` remain manual-only through workflow dispatch
+- Workflow file: `.github/workflows/agent-api-tests.yml`
+
+Preview vs production deployment notes:
+- In GitHub Deployments or Vercel Deployments, look at the deployment environment label: `Preview` means preview, `Production` means production
+- To verify whether a specific commit from `main` reached production, match the deployment SHA to the commit SHA on `main`
+- Vercel preview deployment success triggers the preview API test automatically
+- Production deployments are not auto-tested by the `deployment_status` hook in the current workflow
+- To confirm which branch goes to production, check the Vercel project setting for `Production Branch`
+
 ## Repository Pointers
 
 - SDK: `src/sdk/musashi-agent.ts`

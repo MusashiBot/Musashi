@@ -1,0 +1,144 @@
+name: Agent API Tests
+
+on:
+  push:
+    branches:
+      - testing
+  pull_request:
+  deployment_status:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite to run
+        required: true
+        default: api
+        type: choice
+        options:
+          - api
+          - perf
+          - stress
+          - full
+      api_base_url:
+        description: Optional override for MUSASHI_API_BASE_URL
+        required: false
+        type: string
+      timeout_ms:
+        description: Optional override for MUSASHI_TEST_TIMEOUT_MS
+        required: false
+        type: string
+
+concurrency:
+  group: agent-api-tests-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  agent-api-tests:
+    if: >
+      github.event_name != 'deployment_status' ||
+      (
+        github.event.deployment_status.state == 'success' &&
+        github.event.deployment.environment != 'production' &&
+        github.event.deployment_status.environment_url != ''
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      API_USAGE_ADMIN_KEY: ${{ secrets.API_USAGE_ADMIN_KEY }}
+      MUSASHI_TEST_TIMEOUT_MS: ${{ inputs.timeout_ms || '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha || github.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Select test suite
+        id: suite
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "deployment_status" ]]; then
+            echo "command=pnpm run agent:test:api" >> "$GITHUB_OUTPUT"
+            echo "label=vercel preview api suite" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "command=pnpm run agent:test:api:perf" >> "$GITHUB_OUTPUT"
+            echo "label=weekly perf suite" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.suite }}" in
+              api)
+                echo "command=pnpm run agent:test:api" >> "$GITHUB_OUTPUT"
+                echo "label=manual api suite" >> "$GITHUB_OUTPUT"
+                ;;
+              perf)
+                echo "command=pnpm run agent:test:api:perf" >> "$GITHUB_OUTPUT"
+                echo "label=manual perf suite" >> "$GITHUB_OUTPUT"
+                ;;
+              stress)
+                echo "command=pnpm run agent:test:api:stress" >> "$GITHUB_OUTPUT"
+                echo "label=manual stress suite" >> "$GITHUB_OUTPUT"
+                ;;
+              full)
+                echo "command=pnpm run agent:test:api:full" >> "$GITHUB_OUTPUT"
+                echo "label=manual full suite" >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "Unsupported suite: ${{ inputs.suite }}" >&2
+                exit 1
+                ;;
+            esac
+          else
+            echo "command=pnpm run agent:test:api" >> "$GITHUB_OUTPUT"
+            echo "label=push/pr api suite" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve API base URL
+        id: api_base
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "deployment_status" ]]; then
+            echo "url=${{ github.event.deployment_status.environment_url }}" >> "$GITHUB_OUTPUT"
+            echo "source=vercel preview deployment" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ inputs.api_base_url || '' }}" ]]; then
+            echo "url=${{ inputs.api_base_url }}" >> "$GITHUB_OUTPUT"
+            echo "source=workflow_dispatch input" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=" >> "$GITHUB_OUTPUT"
+            echo "source=default script base URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run selected suite
+        env:
+          MUSASHI_API_BASE_URL: ${{ steps.api_base.outputs.url }}
+        run: ${{ steps.suite.outputs.command }}
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          {
+            echo "## Agent API Tests"
+            echo ""
+            echo "- Suite: ${{ steps.suite.outputs.label }}"
+            echo "- Command: \`${{ steps.suite.outputs.command }}\`"
+            echo "- API base URL source: ${{ steps.api_base.outputs.source }}"
+            echo "- API base override: \`${{ steps.api_base.outputs.url || 'default' }}\`"
+            echo "- Timeout override: \`${MUSASHI_TEST_TIMEOUT_MS:-default}\`"
+            if [[ -n "${API_USAGE_ADMIN_KEY}" ]]; then
+              echo "- Usage audit secret: configured"
+            else
+              echo "- Usage audit secret: not configured"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
