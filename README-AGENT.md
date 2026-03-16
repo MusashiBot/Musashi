@@ -232,6 +232,7 @@ CI / deployment automation:
 - A weekly scheduled workflow runs `agent:test:api:perf`
 - `stress` and `full` remain manual-only through workflow dispatch
 - Workflow file: `.github/workflows/agent-api-tests.yml`
+- If Vercel Deployment Protection is enabled for previews, configure the GitHub secret `VERCEL_AUTOMATION_BYPASS_SECRET` so preview-triggered API tests can bypass the protection layer and hit the deployed API routes directly
 
 Preview vs production deployment notes:
 - In GitHub Deployments or Vercel Deployments, look at the deployment environment label: `Preview` means preview, `Production` means production

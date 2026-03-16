@@ -17,6 +17,7 @@ interface HttpResult {
 
 const BASE_URL = (process.env.MUSASHI_API_BASE_URL || 'https://musashi-api.vercel.app').replace(/\/$/, '');
 const ADMIN_KEY = process.env.API_USAGE_ADMIN_KEY;
+const VERCEL_AUTOMATION_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 const CLIENT_ID = process.env.MUSASHI_TEST_CLIENT_ID || `agent-api-test-${Date.now()}`;
 const TIMEOUT_MS = readIntEnv('MUSASHI_TEST_TIMEOUT_MS', 15000);
 const LATENCY_SAMPLE_SIZE = readIntEnv('MUSASHI_TEST_LATENCY_SAMPLES', 20);
@@ -111,6 +112,7 @@ async function main(): Promise<void> {
   console.log(`Base URL: ${BASE_URL}`);
   console.log(`Client ID: ${CLIENT_ID}`);
   console.log(`Timeout: ${TIMEOUT_MS}ms`);
+  console.log(`Vercel preview bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET ? 'enabled' : 'disabled'}`);
   console.log('');
 
   for (const test of tests) {
@@ -1103,6 +1105,10 @@ async function request(path: string, init: RequestInit = {}): Promise<HttpResult
     const headers = new Headers(init.headers || {});
     if (!headers.has('Content-Type') && init.body) {
       headers.set('Content-Type', 'application/json');
+    }
+    if (VERCEL_AUTOMATION_BYPASS_SECRET) {
+      headers.set('x-vercel-protection-bypass', VERCEL_AUTOMATION_BYPASS_SECRET);
+      headers.set('x-vercel-set-bypass-cookie', 'true');
     }
 
     const response = await fetch(`${BASE_URL}${path}`, {

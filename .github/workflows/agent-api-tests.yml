@@ -1,4 +1,6 @@
 name: Agent API Tests
+run-name: >-
+  Agent API Tests (${{ github.event_name == 'deployment_status' && 'preview deployment' || github.event_name == 'push' && 'push' || github.event_name == 'pull_request' && 'pull request' || github.event_name == 'schedule' && 'weekly perf' || github.event_name == 'workflow_dispatch' && format('manual {0}', inputs.suite) || github.event_name }})
 
 on:
   push:
@@ -46,6 +48,7 @@ jobs:
     timeout-minutes: 45
     env:
       API_USAGE_ADMIN_KEY: ${{ secrets.API_USAGE_ADMIN_KEY }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       MUSASHI_TEST_TIMEOUT_MS: ${{ inputs.timeout_ms || '' }}
     steps:
       - name: Check out repository
@@ -140,5 +143,10 @@ jobs:
               echo "- Usage audit secret: configured"
             else
               echo "- Usage audit secret: not configured"
+            fi
+            if [[ -n "${VERCEL_AUTOMATION_BYPASS_SECRET}" ]]; then
+              echo "- Vercel preview bypass: configured"
+            else
+              echo "- Vercel preview bypass: not configured"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
