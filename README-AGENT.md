@@ -25,7 +25,21 @@ The Chrome extension is optional UI. Agent integrations should use the SDK or di
 npm install
 ```
 
-### 2) SDK Example
+### 2) Verify The SDK And API
+
+Use the built-in smoke test first. It exercises `analyze-text`, `arbitrage`, `movers`, and `feed` in one pass.
+
+```bash
+npx tsx test-sdk.ts
+```
+
+If `tsx` is already available through your package manager setup, this also works:
+
+```bash
+npm exec tsx test-sdk.ts
+```
+
+### 3) SDK Example
 
 ```ts
 import { MusashiAgent } from './src/sdk/musashi-agent';
@@ -41,7 +55,7 @@ const [feed, arbs, movers] = await Promise.all([
 console.log({ feed: feed.length, arbs: arbs.length, movers: movers.length });
 ```
 
-### 3) Run Terminal CLI
+### 4) Run Terminal CLI
 
 ```bash
 npm run agent
@@ -52,6 +66,30 @@ Build/start variant:
 ```bash
 npm run agent:build
 npm run agent:start
+```
+
+### 5) Run The Contract Test Suite
+
+Run the broader API contract test when you want a stronger regression check:
+
+```bash
+npm run agent:test:api
+```
+
+Common variants:
+
+```bash
+# Local API
+MUSASHI_API_BASE_URL=http://127.0.0.1:3000 npm run agent:test:api
+
+# Performance coverage
+npm run agent:test:api:perf
+
+# Stress coverage
+npm run agent:test:api:stress
+
+# Contract + perf + stress
+npm run agent:test:api:full
 ```
 
 ## SDK Usage
@@ -126,36 +164,19 @@ Returns aggregate feed metrics. If this fails while others work, suspect KV/back
 
 Requires enough price history to produce movers; may be empty even when healthy.
 
-## Troubleshooting
+## Verification And Testing
 
-### CLI shows "No data"
+### Smoke test
 
-Run direct checks:
-
-```bash
-curl -i https://musashi-api.vercel.app/api/health
-curl -i "https://musashi-api.vercel.app/api/feed?limit=5"
-curl -i https://musashi-api.vercel.app/api/feed/stats
-curl -i "https://musashi-api.vercel.app/api/markets/arbitrage?minSpread=0.02"
-curl -i "https://musashi-api.vercel.app/api/markets/movers?minChange=0.05"
-```
-
-Interpretation:
-- `200 + empty array`: healthy but no qualifying data.
-- `503/500` with quota-related text: backend storage quota issue.
-- local DNS/network failures: client connectivity issue.
-
-### `ts-node` not found
-
-Use:
+Use this first when you want a quick confidence check:
 
 ```bash
 npx tsx test-sdk.ts
 ```
 
-### Comprehensive API + edge-case test
+### Contract test
 
-Run the broader contract test suite:
+Use this for regular regression checks:
 
 ```bash
 npm run agent:test:api
@@ -225,6 +246,33 @@ Recommended workflow:
 - Use `npm run agent:test:api:stress` only when you intentionally want concurrency and burst coverage
 - Use `npm run agent:test:api:full` when you want contract, perf, and stress in one run
 - Treat repeated `WARN`/`FAIL` results as contract gaps in the deployed API, not as flaky test noise
+
+## Troubleshooting
+
+### CLI shows "No data"
+
+Run direct checks:
+
+```bash
+curl -i https://musashi-api.vercel.app/api/health
+curl -i "https://musashi-api.vercel.app/api/feed?limit=5"
+curl -i https://musashi-api.vercel.app/api/feed/stats
+curl -i "https://musashi-api.vercel.app/api/markets/arbitrage?minSpread=0.02"
+curl -i "https://musashi-api.vercel.app/api/markets/movers?minChange=0.05"
+```
+
+Interpretation:
+- `200 + empty array`: healthy but no qualifying data.
+- `503/500` with quota-related text: backend storage quota issue.
+- local DNS/network failures: client connectivity issue.
+
+### `ts-node` not found
+
+Use:
+
+```bash
+npx tsx test-sdk.ts
+```
 
 CI / deployment automation:
 - GitHub Actions automatically runs `agent:test:api` on `testing` branch pushes and on pull requests
