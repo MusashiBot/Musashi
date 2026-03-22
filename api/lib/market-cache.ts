@@ -17,6 +17,16 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 let cachedArbitrage: ArbitrageOpportunity[] = [];
 let arbCacheTimestamp = 0;
 
+const POLYMARKET_TARGET_COUNT = parsePositiveInt(process.env.MUSASHI_POLYMARKET_TARGET_COUNT, 1200);
+const POLYMARKET_MAX_PAGES = parsePositiveInt(process.env.MUSASHI_POLYMARKET_MAX_PAGES, 20);
+const KALSHI_TARGET_COUNT = parsePositiveInt(process.env.MUSASHI_KALSHI_TARGET_COUNT, 1000);
+const KALSHI_MAX_PAGES = parsePositiveInt(process.env.MUSASHI_KALSHI_MAX_PAGES, 20);
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 /**
  * Fetch and cache markets from both platforms
  * Shared across all API endpoints to avoid duplicate fetches
@@ -35,8 +45,8 @@ export async function getMarkets(): Promise<Market[]> {
 
   try {
     const [polyResult, kalshiResult] = await Promise.allSettled([
-      fetchPolymarkets(500, 10),
-      fetchKalshiMarkets(400, 10),
+      fetchPolymarkets(POLYMARKET_TARGET_COUNT, POLYMARKET_MAX_PAGES),
+      fetchKalshiMarkets(KALSHI_TARGET_COUNT, KALSHI_MAX_PAGES),
     ]);
 
     const polyMarkets = polyResult.status === 'fulfilled' ? polyResult.value : [];
