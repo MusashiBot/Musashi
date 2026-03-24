@@ -8,14 +8,17 @@ import { fetchPolymarkets } from '../../src/api/polymarket-client';
 import { fetchKalshiMarkets } from '../../src/api/kalshi-client';
 import { detectArbitrage } from '../../src/api/arbitrage-detector';
 
-// In-memory cache for markets (5 minutes TTL)
+// In-memory cache for markets
+// Default: 20 seconds (configurable via MARKET_CACHE_TTL_SECONDS env var)
 let cachedMarkets: Market[] = [];
 let cacheTimestamp = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = (parseInt(process.env.MARKET_CACHE_TTL_SECONDS || '20', 10)) * 1000;
 
-// In-memory cache for arbitrage opportunities (same TTL as markets)
+// In-memory cache for arbitrage opportunities
+// Default: 15 seconds (configurable via ARBITRAGE_CACHE_TTL_SECONDS env var)
 let cachedArbitrage: ArbitrageOpportunity[] = [];
 let arbCacheTimestamp = 0;
+const ARB_CACHE_TTL_MS = (parseInt(process.env.ARBITRAGE_CACHE_TTL_SECONDS || '15', 10)) * 1000;
 
 /**
  * Fetch and cache markets from both platforms
@@ -26,12 +29,12 @@ export async function getMarkets(): Promise<Market[]> {
 
   // Return cached if fresh
   if (cachedMarkets.length > 0 && (now - cacheTimestamp) < CACHE_TTL_MS) {
-    console.log(`[Market Cache] Using cached ${cachedMarkets.length} markets`);
+    console.log(`[Market Cache] Using cached ${cachedMarkets.length} markets (TTL: ${CACHE_TTL_MS}ms, age: ${now - cacheTimestamp}ms)`);
     return cachedMarkets;
   }
 
   // Fetch fresh markets
-  console.log('[Market Cache] Fetching fresh markets...');
+  console.log(`[Market Cache] Fetching fresh markets... (TTL: ${CACHE_TTL_MS}ms)`);
 
   try {
     const [polyResult, kalshiResult] = await Promise.allSettled([
@@ -69,12 +72,12 @@ export async function getArbitrage(minSpread: number = 0.03): Promise<ArbitrageO
   const now = Date.now();
 
   // Recompute if cache is stale
-  if (cachedArbitrage.length === 0 || (now - arbCacheTimestamp) >= CACHE_TTL_MS) {
+  if (cachedArbitrage.length === 0 || (now - arbCacheTimestamp) >= ARB_CACHE_TTL_MS) {
     console.log('[Arbitrage Cache] Computing arbitrage opportunities...');
     // Cache with low threshold (0.01) so we can filter client-side
     cachedArbitrage = detectArbitrage(markets, 0.01);
     arbCacheTimestamp = now;
-    console.log(`[Arbitrage Cache] Cached ${cachedArbitrage.length} opportunities (minSpread: 0.01)`);
+    console.log(`[Arbitrage Cache] Cached ${cachedArbitrage.length} opportunities (minSpread: 0.01, TTL: ${ARB_CACHE_TTL_MS}ms)`);
   }
 
   // Filter cached results by requested minSpread
