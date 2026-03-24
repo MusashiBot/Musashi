@@ -182,6 +182,74 @@ Use this for regular regression checks:
 npm run agent:test:api
 ```
 
+### Local market-source test
+
+Use this when you want to debug market fetching and cached arbitrage inputs locally without running `vercel dev`:
+
+```bash
+npm run agent:test:local:markets
+```
+
+What it does:
+- Fetches a smaller local sample from Polymarket and Kalshi first
+- Loads the shared market cache path used by the API
+- Prints combined Polymarket/Kalshi counts
+- Runs local arbitrage detection and prints the top few matches
+
+Useful environment variables:
+
+```bash
+# Increase source coverage
+POLYMARKET_TARGET_COUNT=1200 POLYMARKET_MAX_PAGES=24 \
+KALSHI_TARGET_COUNT=1000 KALSHI_MAX_PAGES=30 \
+npm run agent:test:local:markets
+
+# Local-only Kalshi experiments
+ALLOW_KALSHI_NON_BINARY=1 npm run agent:test:local:markets
+ALLOW_KALSHI_NON_BINARY=1 EXCLUDE_KALSHI_MVE=0 npm run agent:test:local:markets
+```
+
+How to read it:
+- `Polymarket fetch: OK (...)` / `Kalshi fetch: OK (...)`: direct client calls are working
+- `Combined markets`: the merged count used by the API cache path
+- `Kalshi count: 0`: Kalshi fetch failed or returned no retained partial data
+- `Arbitrage count: 0`: data loaded, but the matcher did not find valid cross-platform pairs
+
+### Local arbitrage debug
+
+Use this when arbitrage is empty and you want to inspect the best near-miss candidates:
+
+```bash
+npm run agent:test:local:arbitrage-debug
+```
+
+Useful variants:
+
+```bash
+# Include more Kalshi market shapes in local-only debugging
+ALLOW_KALSHI_NON_BINARY=1 EXCLUDE_KALSHI_MVE=0 npm run agent:test:local:arbitrage-debug
+
+# Reduce output volume
+ARBITRAGE_DEBUG_LIMIT=10 npm run agent:test:local:arbitrage-debug
+
+# Ignore tiny spreads
+ARBITRAGE_DEBUG_MIN_SPREAD=0.02 npm run agent:test:local:arbitrage-debug
+```
+
+What it prints for each candidate:
+- `spread`: absolute YES-price difference
+- `titleSim`: title/entity similarity score
+- `keywordOverlap`: count of shared filtered keywords
+- `sharedEntities`: count of shared extracted entities
+- `categoryMatch`: whether both markets landed in the same category
+- `blocker`: the main reason the pair did not pass the current matcher
+
+This is the fastest way to distinguish:
+- source-coverage problems
+- category-mapping problems
+- noisy entity overlaps such as common first names
+- matcher thresholds that are too strict for the current market mix
+
 Common scenarios:
 
 ```bash
@@ -242,6 +310,8 @@ Cold-start note:
 
 Recommended workflow:
 - Use plain `npm run agent:test:api` for regular regression checks
+- Use `npm run agent:test:local:markets` before changing fetch limits, cache behavior, or Kalshi filters
+- Use `npm run agent:test:local:arbitrage-debug` when `/api/markets/arbitrage` is empty but market counts look healthy
 - Use `npm run agent:test:api:perf` when you want both warm-latency and cold-start measurements
 - Use `npm run agent:test:api:stress` only when you intentionally want concurrency and burst coverage
 - Use `npm run agent:test:api:full` when you want contract, perf, and stress in one run

@@ -26,6 +26,7 @@ interface MarketMover {
   currentPrice: number;
   direction: 'up' | 'down';
   timestamp: number;
+  comparisonWindowHours?: number;
 }
 
 const HISTORY_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
@@ -87,7 +88,10 @@ async function recordPriceSnapshots(markets: Market[]): Promise<void> {
  * Get price change for a market from KV
  * Returns both the price change and previous price to avoid duplicate KV reads
  */
-async function getPriceChange(marketId: string, hoursAgo: number): Promise<{ change: number; previousPrice: number } | null> {
+async function getPriceChange(
+  marketId: string,
+  hoursAgo: number,
+): Promise<{ change: number; previousPrice: number; comparisonWindowHours: number } | null> {
   const key = getSnapshotKey(marketId);
   const snapshots = await kv.get<PriceSnapshot[]>(key);
 
@@ -96,28 +100,49 @@ async function getPriceChange(marketId: string, hoursAgo: number): Promise<{ cha
   }
 
   const current = snapshots[snapshots.length - 1];
-  const targetTime = Date.now() - (hoursAgo * 60 * 60 * 1000);
+  const fallbackWindows = Array.from(
+    new Set([hoursAgo, 3, 6, 12, 24, 72, 168]),
+  ).sort((left, right) => left - right);
 
-  // Find closest snapshot to target time
-  let closestSnapshot = snapshots[0];
-  let closestDiff = Math.abs(closestSnapshot.timestamp - targetTime);
+  for (const windowHours of fallbackWindows) {
+    const targetTime = Date.now() - (windowHours * 60 * 60 * 1000);
 
-  for (const snapshot of snapshots) {
-    const diff = Math.abs(snapshot.timestamp - targetTime);
-    if (diff < closestDiff) {
-      closestDiff = diff;
-      closestSnapshot = snapshot;
+    // Find closest snapshot to target time
+    let closestSnapshot = snapshots[0];
+    let closestDiff = Math.abs(closestSnapshot.timestamp - targetTime);
+
+    for (const snapshot of snapshots) {
+      const diff = Math.abs(snapshot.timestamp - targetTime);
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestSnapshot = snapshot;
+      }
     }
+
+    // Accept a looser bound for larger demo windows so older history still produces output
+    const maxAllowedDiff = Math.max(windowHours * 60 * 60 * 1000 * 2, 30 * 60 * 1000);
+    if (closestDiff > maxAllowedDiff) {
+      continue;
+    }
+
+    return {
+      change: current.yesPrice - closestSnapshot.yesPrice,
+      previousPrice: closestSnapshot.yesPrice,
+      comparisonWindowHours: windowHours,
+    };
   }
 
-  // If too far from target, return null
-  if (closestDiff > (hoursAgo * 60 * 60 * 1000 * 2)) {
-    return null;
-  }
+  // Final fallback for sparse history: compare against the immediately prior snapshot.
+  const previousSnapshot = snapshots[snapshots.length - 2];
+  const comparisonWindowHours = Math.max(
+    (current.timestamp - previousSnapshot.timestamp) / (60 * 60 * 1000),
+    0.01,
+  );
 
   return {
-    change: current.yesPrice - closestSnapshot.yesPrice,
-    previousPrice: closestSnapshot.yesPrice,
+    change: current.yesPrice - previousSnapshot.yesPrice,
+    previousPrice: previousSnapshot.yesPrice,
+    comparisonWindowHours,
   };
 }
 
@@ -147,6 +172,7 @@ async function detectMovers(markets: Market[], minChange: number): Promise<Marke
             currentPrice: market.yesPrice,
             direction: priceData.change > 0 ? 'up' : 'down' as 'up' | 'down',
             timestamp: Date.now(),
+            comparisonWindowHours: priceData.comparisonWindowHours,
           };
         }
 

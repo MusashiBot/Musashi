@@ -256,6 +256,35 @@ npm run dev
 npm run clean
 ```
 
+### Local API And Matcher Debugging
+
+When you want to debug market fetching or arbitrage matching locally, use the built-in scripts instead of `api:dev`. `npm run api:dev` starts the backend database service on `127.0.0.1:8787`; it does not serve the Vercel-style market endpoints.
+
+```bash
+# Local market fetch + cache + arbitrage summary
+npm run agent:test:local:markets
+
+# Local arbitrage near-miss debugging
+npm run agent:test:local:arbitrage-debug
+```
+
+Helpful local-only variants:
+
+```bash
+# Expand source coverage
+POLYMARKET_TARGET_COUNT=1200 POLYMARKET_MAX_PAGES=24 \
+KALSHI_TARGET_COUNT=1000 KALSHI_MAX_PAGES=30 \
+npm run agent:test:local:markets
+
+# Include broader Kalshi shapes in local debugging
+ALLOW_KALSHI_NON_BINARY=1 EXCLUDE_KALSHI_MVE=0 \
+npm run agent:test:local:arbitrage-debug
+```
+
+What each script is for:
+- `agent:test:local:markets`: verifies Polymarket/Kalshi fetchers, shared cache counts, and local arbitrage output
+- `agent:test:local:arbitrage-debug`: prints the strongest near-match pairs and explains why they failed the current matcher
+
 ### Making Changes to Extension
 
 1. Edit source files in `src/`

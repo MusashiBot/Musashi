@@ -8,6 +8,8 @@
     "clean": "rm -rf dist",
     "agent": "tsx cli/index.ts",
     "agent:test:api": "tsx scripts/test-agent-api.ts",
+    "agent:test:local:markets": "tsx scripts/test-local-markets.ts",
+    "agent:test:local:arbitrage-debug": "tsx scripts/test-local-arbitrage-debug.ts",
     "agent:test:api:perf": "MUSASHI_TEST_INCLUDE_PERF=1 tsx scripts/test-agent-api.ts",
     "agent:test:api:stress": "MUSASHI_TEST_INCLUDE_STRESS=1 tsx scripts/test-agent-api.ts",
     "agent:test:api:full": "MUSASHI_TEST_INCLUDE_PERF=1 MUSASHI_TEST_INCLUDE_STRESS=1 tsx scripts/test-agent-api.ts",

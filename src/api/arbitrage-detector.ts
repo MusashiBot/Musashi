@@ -3,6 +3,28 @@
 
 import { Market, ArbitrageOpportunity } from '../types/market';
 
+const ARBITRAGE_STOP_WORDS = new Set([
+  'will', 'before', 'after', 'than', 'over', 'under', 'above', 'below',
+  'market', 'price', 'world', 'company', 'companies', 'largest', 'smallest',
+  'first', 'last', 'today', 'tomorrow', 'march', 'april', 'january',
+  'february', 'june', 'july', 'august', 'september', 'october', 'november',
+  'december',
+]);
+const COMMON_NAME_ENTITIES = new Set([
+  'alex', 'matt', 'joel', 'kevin', 'martin', 'mar', 'state', 'will',
+  'john', 'jake', 'ryan', 'michael', 'david', 'james', 'robert', 'chris',
+  'nick', 'tom', 'sam', 'joe', 'dan', 'ben', 'max', 'luke',
+]);
+const KALSHI_NOISE_PATTERNS = [
+  /first goalscorer/i,
+  /\b\d+\+\s+points\b/i,
+  /\b\d+\+\s+rebounds\b/i,
+  /\b\d+\+\s+assists\b/i,
+  /\b\d+\+\s+shots\b/i,
+  /\btemp\b/i,
+  /\bmaps be played\b/i,
+];
+
 /**
  * Normalize a title for fuzzy matching
  * Removes punctuation, dates, common question words, normalizes spacing
@@ -11,7 +33,7 @@ function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
     .replace(/\?/g, '') // Remove question marks
-    .replace(/\b(will|before|after|by|in|on|at|the|a|an)\b/g, '') // Remove filler words
+    .replace(/\b(will|before|after|by|in|on|at|the|a|an|of|to)\b/g, '') // Remove filler words
     .replace(/\b(2024|2025|2026|2027|2028)\b/g, '') // Remove years
     .replace(/[^a-z0-9\s]/g, ' ') // Remove all punctuation
     .replace(/\s+/g, ' ') // Normalize whitespace
@@ -28,10 +50,8 @@ function extractEntities(title: string): Set<string> {
   const entities = new Set<string>();
 
   // Extract significant words (3+ chars, not in stop list)
-  const stopWords = new Set(['will', 'hit', 'reach', 'win', 'lose', 'pass', 'than', 'over', 'under']);
-
   for (const word of words) {
-    if (word.length >= 3 && !stopWords.has(word)) {
+    if (word.length >= 3 && !ARBITRAGE_STOP_WORDS.has(word)) {
       entities.add(word);
     }
   }
@@ -67,8 +87,12 @@ function calculateTitleSimilarity(title1: string, title2: string): number {
  * Returns the number of shared keywords
  */
 function calculateKeywordOverlap(market1: Market, market2: Market): number {
-  const keywords1 = new Set(market1.keywords);
-  const keywords2 = new Set(market2.keywords);
+  const keywords1 = new Set(
+    market1.keywords.filter((keyword) => keyword.length >= 4 && !ARBITRAGE_STOP_WORDS.has(keyword)),
+  );
+  const keywords2 = new Set(
+    market2.keywords.filter((keyword) => keyword.length >= 4 && !ARBITRAGE_STOP_WORDS.has(keyword)),
+  );
 
   let overlap = 0;
   for (const kw of keywords1) {
@@ -80,6 +104,14 @@ function calculateKeywordOverlap(market1: Market, market2: Market): number {
   return overlap;
 }
 
+function isNoisySharedEntity(entity: string): boolean {
+  return entity.length < 4 || COMMON_NAME_ENTITIES.has(entity);
+}
+
+function isNoisyKalshiMarket(market: Market): boolean {
+  return KALSHI_NOISE_PATTERNS.some((pattern) => pattern.test(market.title));
+}
+
 /**
  * Check if two markets refer to the same event
  * Uses title similarity + keyword overlap + category matching
@@ -89,10 +121,12 @@ function areMarketsSimilar(poly: Market, kalshi: Market): {
   confidence: number;
   reason: string;
 } {
+  if (isNoisyKalshiMarket(kalshi)) {
+    return { isSimilar: false, confidence: 0, reason: 'Noisy Kalshi market type' };
+  }
+
   // Must be in the same category (or one is 'other')
-  const categoryMatch = poly.category === kalshi.category ||
-                       poly.category === 'other' ||
-                       kalshi.category === 'other';
+  const categoryMatch = poly.category === kalshi.category && poly.category !== 'other';
 
   if (!categoryMatch) {
     return { isSimilar: false, confidence: 0, reason: 'Different categories' };
@@ -116,7 +150,7 @@ function areMarketsSimilar(poly: Market, kalshi: Market): {
     };
   }
 
-  if (keywordOverlap >= 3) {
+  if (keywordOverlap >= 3 && titleSim > 0.15) {
     const confidence = Math.min(keywordOverlap / 10, 0.9); // Cap at 0.9
     return {
       isSimilar: true,
@@ -129,12 +163,17 @@ function areMarketsSimilar(poly: Market, kalshi: Market): {
   const polyEntities = extractEntities(poly.title);
   const kalshiEntities = extractEntities(kalshi.title);
   const sharedEntities = Array.from(polyEntities).filter(e => kalshiEntities.has(e));
+  const meaningfulSharedEntities = sharedEntities.filter((entity) => !isNoisySharedEntity(entity));
 
-  if (sharedEntities.length >= 2 && titleSim > 0.3) {
+  if (sharedEntities.length === 1 && meaningfulSharedEntities.length === 0) {
+    return { isSimilar: false, confidence: 0, reason: 'Only common-name entity overlap' };
+  }
+
+  if (meaningfulSharedEntities.length >= 2 && titleSim > 0.3) {
     return {
       isSimilar: true,
       confidence: 0.7,
-      reason: `Shared entities: ${sharedEntities.slice(0, 3).join(', ')}`
+      reason: `Shared entities: ${meaningfulSharedEntities.slice(0, 3).join(', ')}`
     };
   }
 

@@ -36,24 +36,19 @@ interface KalshiMarketsResponse {
   cursor?: string;
 }
 
+interface FetchKalshiMarketsOptions {
+  includeNonBinary?: boolean;
+  excludeMve?: boolean;
+}
+
 /**
- * Returns true for simple binary YES/NO markets.
- * Filters out complex multi-variable event (parlay/combo) markets whose
- * titles are multi-leg strings like "yes Lakers, yes Celtics, no Bulls..."
+ * Returns true for binary Kalshi markets we can map into the shared Market
+ * model. Keep this intentionally close to the Polymarket filter so we maximize
+ * coverage for demo/API usage.
  */
-function isSimpleMarket(km: KalshiMarket): boolean {
+function isBinaryMarket(km: KalshiMarket): boolean {
   if (!km.title || !km.ticker) return false;
-
-  // MVE / multi-game parlay markets
-  if (km.mve_collection_ticker) return false;
-  if (/MULTIGAME|MVE/i.test(km.ticker)) return false;
-
-  // Titles that start with "yes " are multi-leg combo selections
-  if (/^yes\s/i.test(km.title.trim())) return false;
-
-  // More than 2 commas = likely a multi-leg title
-  const commas = (km.title.match(/,/g) || []).length;
-  if (commas > 2) return false;
+  if (km.market_type && km.market_type !== 'binary') return false;
 
   return true;
 }
@@ -61,24 +56,38 @@ function isSimpleMarket(km: KalshiMarket): boolean {
 /**
  * Fetch open markets from Kalshi's public API using cursor pagination.
  *
- * The default API ordering puts thousands of MVE (parlay/sports) markets first.
- * isSimpleMarket() filters those out, so we must page through until we have
- * enough simple binary markets for meaningful tweet matching.
+ * The default API ordering can include a mix of market shapes. We keep the
+ * fetcher intentionally broad and rely on binary-market filtering plus later
+ * matching logic to decide what is useful.
  *
- * Stops when we reach `targetSimpleCount` simple markets or exhaust `maxPages`.
+ * Stops when we reach `targetSimpleCount` binary markets or exhaust `maxPages`.
  */
 export async function fetchKalshiMarkets(
   targetSimpleCount = 400,
   maxPages = 15,
+  options: FetchKalshiMarketsOptions = {},
 ): Promise<Market[]> {
   const PAGE_SIZE = 200;
-  const allSimple: Market[] = [];
+  const allMarkets: Market[] = [];
   let cursor: string | undefined;
+  const includeNonBinary = options.includeNonBinary === true;
+  const excludeMve = options.excludeMve !== false;
 
   for (let page = 0; page < maxPages; page++) {
-    const url = cursor
-      ? `${KALSHI_API}/markets?status=open&mve_filter=exclude&limit=${PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`
-      : `${KALSHI_API}/markets?status=open&mve_filter=exclude&limit=${PAGE_SIZE}`;
+    const params = new URLSearchParams({
+      status: 'open',
+      limit: String(PAGE_SIZE),
+    });
+
+    if (excludeMve) {
+      params.set('mve_filter', 'exclude');
+    }
+
+    if (cursor) {
+      params.set('cursor', cursor);
+    }
+
+    const url = `${KALSHI_API}/markets?${params.toString()}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -89,6 +98,18 @@ export async function fetchKalshiMarkets(
 
       if (!resp.ok) {
         console.error(`[Musashi SW] Kalshi HTTP ${resp.status} — declarativeNetRequest header stripping may not be active yet`);
+
+        // Preserve already-fetched pages for demo/local usage instead of
+        // discarding the whole platform when a later page gets rate-limited.
+        if (allMarkets.length > 0 && resp.status === 429) {
+          console.warn(
+            `[Musashi] Kalshi rate-limited after ${page} pages; ` +
+            `returning ${allMarkets.length} partial markets. ` +
+            `Reduce KALSHI_MAX_PAGES / KALSHI_TARGET_COUNT if you want fewer 429s.`,
+          );
+          break;
+        }
+
         throw new Error(`Kalshi API responded with ${resp.status}`);
       }
 
@@ -97,32 +118,50 @@ export async function fetchKalshiMarkets(
         throw new Error('Unexpected Kalshi API response shape');
       }
 
-      const pageSimple = data.markets
-        .filter(isSimpleMarket)
+      const pageMarkets = data.markets
+        .filter((market) => includeNonBinary || isBinaryMarket(market))
         .map(toMarket)
         .filter(m => m.yesPrice > 0 && m.yesPrice < 1);
 
-      allSimple.push(...pageSimple);
+      allMarkets.push(...pageMarkets);
 
       console.log(
-        `[Musashi] Page ${page + 1}: ${data.markets.length} raw → ` +
-        `${pageSimple.length} simple (total simple: ${allSimple.length})`
+        `[Musashi] Kalshi page ${page + 1}: ${data.markets.length} raw → ` +
+        `${pageMarkets.length} ${includeNonBinary ? 'usable' : 'binary'} ` +
+        `(total ${includeNonBinary ? 'usable' : 'binary'}: ${allMarkets.length})`
       );
 
       // Stop early once we have enough, or when the API has no more pages
-      if (allSimple.length >= targetSimpleCount || !data.cursor) break;
+      if (allMarkets.length >= targetSimpleCount || !data.cursor) break;
       cursor = data.cursor;
     } catch (error) {
       clearTimeout(timeoutId);
       if ((error as Error).name === 'AbortError') {
+        if (allMarkets.length > 0) {
+          console.warn(
+            `[Musashi] Kalshi timed out after ${page} pages; ` +
+            `returning ${allMarkets.length} partial markets`,
+          );
+          break;
+        }
+
         throw new Error(`Kalshi API request timed out after ${FETCH_TIMEOUT_MS}ms`);
       }
+
+      if (allMarkets.length > 0) {
+        console.warn(
+          `[Musashi] Kalshi fetch failed after ${page} pages; ` +
+          `returning ${allMarkets.length} partial markets (${String(error)})`,
+        );
+        break;
+      }
+
       throw error;
     }
   }
 
-  console.log(`[Musashi] Fetched ${allSimple.length} live markets from Kalshi`);
-  return allSimple;
+  console.log(`[Musashi] Fetched ${allMarkets.length} live markets from Kalshi`);
+  return allMarkets.slice(0, targetSimpleCount);
 }
 
 /** Map a raw Kalshi market object to our Market interface */
