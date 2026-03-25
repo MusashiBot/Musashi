@@ -276,6 +276,9 @@ POLYMARKET_TARGET_COUNT=1200 POLYMARKET_MAX_PAGES=24 \
 KALSHI_TARGET_COUNT=1000 KALSHI_MAX_PAGES=30 \
 npm run agent:test:local:markets
 
+# Only load / inspect selected categories or topic aliases
+MARKET_CATEGORIES=bitcoin,jesus npm run agent:test:local:markets
+
 # Include broader Kalshi shapes in local debugging
 ALLOW_KALSHI_NON_BINARY=1 EXCLUDE_KALSHI_MVE=0 \
 npm run agent:test:local:arbitrage-debug

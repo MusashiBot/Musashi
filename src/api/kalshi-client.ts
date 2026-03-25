@@ -251,5 +251,6 @@ function inferCategory(ticker: string): string {
   if (/NFL|NBA|MLB|NHL|SPORT|SUPER|WORLD|FIFA|GOLF|TENNIS/.test(t)) return 'sports';
   if (/CLIMATE|TEMP|WEATHER|CARBON|EMISS|ENERGY|OIL/.test(t)) return 'climate';
   if (/UKRAIN|RUSSIA|CHINA|NATO|TAIWAN|ISRAEL|GAZA|IRAN/.test(t)) return 'geopolitics';
+  if (/JESUS|CHRIST|CHRISTIAN|POPE|VATICAN|BIBLE|CATHOLIC/.test(t)) return 'religion';
   return 'other';
 }

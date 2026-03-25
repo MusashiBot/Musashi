@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { kv } from '@vercel/kv';
 import { Market } from '../../src/types/market';
 import { getMarkets } from '../lib/market-cache';
+import { filterMarketsByCategory } from '../../src/api/market-category-filter';
 
 /**
  * Vercel KV-based price tracking for persistent movers detection
@@ -284,7 +285,10 @@ export default async function handler(
 
     // Filter by category if specified
     if (category) {
-      movers = movers.filter(m => m.market.category === category);
+      const allowedIds = new Set(
+        filterMarketsByCategory(markets, category).map((market) => market.id),
+      );
+      movers = movers.filter((mover) => allowedIds.has(mover.market.id));
     }
 
     // Limit results

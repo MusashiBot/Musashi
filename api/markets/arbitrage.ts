@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getMarkets, getArbitrage } from '../lib/market-cache';
+import { filterArbitrageByCategory } from '../../src/api/market-category-filter';
 
 export default async function handler(
   req: VercelRequest,
@@ -81,10 +82,10 @@ export default async function handler(
 
     // Apply additional filters client-side
     // Note: opportunities are already sorted by spread descending from detectArbitrage()
-    opportunities = opportunities
-      .filter(arb => arb.confidence >= minConfidenceNum)
-      .filter(arb => !category || arb.polymarket.category === category || arb.kalshi.category === category)
-      .slice(0, limitNum);
+    opportunities = filterArbitrageByCategory(
+      opportunities.filter((arb) => arb.confidence >= minConfidenceNum),
+      category,
+    ).slice(0, limitNum);
 
     // Build response
     const response = {

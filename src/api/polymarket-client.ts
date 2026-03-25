@@ -162,6 +162,7 @@ function inferCategory(question: string, apiCategory?: string): string {
     if (c.includes('politic') || c.includes('elect')) return 'us_politics';
     if (c.includes('sport') || c.includes('nfl') || c.includes('nba')) return 'sports';
     if (c.includes('tech')) return 'technology';
+    if (c.includes('relig') || c.includes('jesus') || c.includes('christ') || c.includes('pope')) return 'religion';
   }
 
   const q = question.toUpperCase();
@@ -172,5 +173,6 @@ function inferCategory(question: string, apiCategory?: string): string {
   if (/NFL|NBA|MLB|NHL|SUPER BOWL|WORLD CUP|FIFA|GOLF|TENNIS/.test(q)) return 'sports';
   if (/CLIMATE|WEATHER|CARBON|ENERGY|OIL/.test(q)) return 'climate';
   if (/UKRAINE|RUSSIA|CHINA|NATO|TAIWAN|ISRAEL|GAZA|IRAN/.test(q)) return 'geopolitics';
+  if (/JESUS|CHRIST|CHRISTIAN|POPE|VATICAN|BIBLE|CATHOLIC/.test(q)) return 'religion';
   return 'other';
 }

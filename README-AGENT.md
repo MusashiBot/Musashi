@@ -204,6 +204,9 @@ POLYMARKET_TARGET_COUNT=1200 POLYMARKET_MAX_PAGES=24 \
 KALSHI_TARGET_COUNT=1000 KALSHI_MAX_PAGES=30 \
 npm run agent:test:local:markets
 
+# Restrict output to one or more category aliases/topics
+MARKET_CATEGORIES=bitcoin,jesus npm run agent:test:local:markets
+
 # Local-only Kalshi experiments
 ALLOW_KALSHI_NON_BINARY=1 npm run agent:test:local:markets
 ALLOW_KALSHI_NON_BINARY=1 EXCLUDE_KALSHI_MVE=0 npm run agent:test:local:markets

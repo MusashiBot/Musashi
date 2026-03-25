@@ -1,6 +1,7 @@
 import { fetchPolymarkets } from '../src/api/polymarket-client';
 import { fetchKalshiMarkets } from '../src/api/kalshi-client';
 import { detectArbitrage } from '../src/api/arbitrage-detector';
+import { filterArbitrageByCategory, filterMarketsByCategory } from '../src/api/market-category-filter';
 import { getMarkets, getArbitrage } from '../api/lib/market-cache';
 
 const POLYMARKET_TARGET_COUNT = parseInt(process.env.POLYMARKET_TARGET_COUNT || '800', 10);
@@ -11,6 +12,7 @@ const ALLOW_KALSHI_NON_BINARY = process.env.ALLOW_KALSHI_NON_BINARY === '1';
 const EXCLUDE_KALSHI_MVE = ALLOW_KALSHI_NON_BINARY
   ? process.env.EXCLUDE_KALSHI_MVE === '1'
   : true;
+const MARKET_CATEGORIES = process.env.MARKET_CATEGORIES;
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(2)}%`;
@@ -24,6 +26,7 @@ async function main(): Promise<void> {
   );
   console.log(`Kalshi non-binary in local test: ${ALLOW_KALSHI_NON_BINARY ? 'enabled' : 'disabled'}`);
   console.log(`Kalshi MVE filter in local test: ${EXCLUDE_KALSHI_MVE ? 'exclude' : 'include'}`);
+  console.log(`Category filter in local test: ${MARKET_CATEGORIES || 'all'}`);
 
   const [polyResult, kalshiResult] = await Promise.allSettled([
     fetchPolymarkets(Math.min(POLYMARKET_TARGET_COUNT, 100), Math.min(POLYMARKET_MAX_PAGES, 3)),
@@ -52,9 +55,10 @@ async function main(): Promise<void> {
   console.log('');
   console.log('Testing shared market cache...');
 
-  const markets = ALLOW_KALSHI_NON_BINARY
+  const allMarkets = ALLOW_KALSHI_NON_BINARY
     ? await loadLocalTestMarkets()
     : await getMarkets();
+  const markets = filterMarketsByCategory(allMarkets, MARKET_CATEGORIES);
   const polymarketCount = markets.filter((market) => market.platform === 'polymarket').length;
   const kalshiCount = markets.filter((market) => market.platform === 'kalshi').length;
 
@@ -65,9 +69,10 @@ async function main(): Promise<void> {
   console.log('');
   console.log('Testing arbitrage detection...');
 
-  const opportunities = ALLOW_KALSHI_NON_BINARY
+  const allOpportunities = ALLOW_KALSHI_NON_BINARY
     ? detectArbitrage(markets, 0.01)
     : await getArbitrage(0.01);
+  const opportunities = filterArbitrageByCategory(allOpportunities, MARKET_CATEGORIES);
   console.log(`Arbitrage count: ${opportunities.length}`);
 
   for (const [index, opportunity] of opportunities.slice(0, 5).entries()) {
