@@ -7,6 +7,7 @@ import { batchGetFromKV, setFeedCache, getFeedCache, getFeedCacheTimestamp } fro
 
 const FEED_LATEST_KEY = 'feed:latest';
 const FEED_CACHE_KEY_PREFIX = 'feed_memory_';
+const FEED_CACHE_CONTROL = 's-maxage=60, stale-while-revalidate=300';
 
 function getTweetKey(tweetId: string): string {
   return `tweet:${tweetId}`;
@@ -14,6 +15,36 @@ function getTweetKey(tweetId: string): string {
 
 function getCategoryKey(category: AccountCategory): string {
   return `feed:category:${category}`;
+}
+
+function isInfraError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('kv') ||
+    normalized.includes('redis') ||
+    normalized.includes('upstash') ||
+    normalized.includes('quota') ||
+    normalized.includes('token') ||
+    normalized.includes('credential') ||
+    normalized.includes('connect') ||
+    normalized.includes('fetch failed') ||
+    normalized.includes('missing') && normalized.includes('rest')
+  );
+}
+
+function getSanitizedFeedError(message: string): { status: number; error: string; note?: string } {
+  if (isInfraError(message)) {
+    return {
+      status: 503,
+      error: 'Feed service temporarily unavailable. Check KV configuration and try again.',
+      note: 'Ensure the local KV REST URL and credential are configured for feed endpoints.',
+    };
+  }
+
+  return {
+    status: 500,
+    error: 'Internal server error',
+  };
 }
 
 // ─── Main Handler ──────────────────────────────────────────────────────────
@@ -37,6 +68,7 @@ export default async function handler(
 
   // Only allow GET
   if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, OPTIONS');
     res.status(405).json({
       success: false,
       error: 'Method not allowed. Use GET.',
@@ -78,6 +110,17 @@ export default async function handler(
         error: `Invalid minUrgency. Must be one of: low, medium, high, critical`,
       });
       return;
+    }
+
+    if (since) {
+      const sinceDate = new Date(since);
+      if (Number.isNaN(sinceDate.getTime())) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid "since" timestamp. Use ISO 8601 format.',
+        });
+        return;
+      }
     }
 
     // Step 1: Get feed index (category-specific or latest)
@@ -139,16 +182,8 @@ export default async function handler(
     }
 
     if (since) {
-      try {
-        const sinceDate = new Date(since);
-        validTweets = validTweets.filter(t => new Date(t.tweet.created_at) > sinceDate);
-      } catch (error) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid "since" timestamp. Use ISO 8601 format.',
-        });
-        return;
-      }
+      const sinceDate = new Date(since);
+      validTweets = validTweets.filter(t => new Date(t.tweet.created_at) > sinceDate);
     }
 
     // Step 7: Determine next cursor
@@ -180,13 +215,12 @@ export default async function handler(
     setFeedCache(cacheKey, response, 5 * 60 * 1000); // 5 min TTL
 
     // Cache for 60 seconds at edge with stale-while-revalidate
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+    res.setHeader('Cache-Control', FEED_CACHE_CONTROL);
     res.status(200).json(response);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Feed API] Error:', errorMessage);
 
-    const isKVError = errorMessage.includes('KV') || errorMessage.includes('Redis');
     const isQuotaError = errorMessage.includes('quota') || errorMessage.includes('max requests limit');
 
     // Fallback to in-memory cache on quota error
@@ -216,18 +250,21 @@ export default async function handler(
         };
 
         console.log(`[Feed API] Serving cached feed (age: ${fallbackResponse.data.metadata.cache_age_seconds}s)`);
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        res.setHeader('Cache-Control', FEED_CACHE_CONTROL);
         res.status(200).json(fallbackResponse);
         return;
       }
     }
 
-    // No cache available, return error
-    res.status(isQuotaError ? 503 : 500).json({
+    const sanitized = getSanitizedFeedError(errorMessage);
+    res.setHeader('Cache-Control', FEED_CACHE_CONTROL);
+    res.status(isQuotaError ? 503 : sanitized.status).json({
       success: false,
-      error: isQuotaError ? 'Service temporarily unavailable due to quota limits. No cached data available.' : errorMessage,
-      ...(isKVError && {
-        note: 'Vercel KV storage error. Ensure KV_REST_API_URL and KV_REST_API_TOKEN are set.',
+      error: isQuotaError
+        ? 'Service temporarily unavailable due to quota limits. No cached data available.'
+        : sanitized.error,
+      ...(sanitized.note && {
+        note: sanitized.note,
       }),
     });
   }

@@ -123,6 +123,37 @@ jobs:
             echo "source=default script base URL" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Wait for preview API readiness
+        if: github.event_name == 'deployment_status'
+        shell: bash
+        env:
+          BASE_URL: ${{ steps.api_base.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          attempt=0
+          max_attempts=30
+
+          while [[ "$attempt" -lt "$max_attempts" ]]; do
+            attempt=$((attempt + 1))
+
+            status=$(curl -sS -o /tmp/musashi-preview-health.out -w "%{http_code}" \
+              -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+              -H "x-vercel-set-bypass-cookie: true" \
+              "${BASE_URL}/api/health" || true)
+
+            if [[ "$status" == "200" || "$status" == "503" ]]; then
+              echo "Preview API ready on attempt ${attempt} with status ${status}"
+              exit 0
+            fi
+
+            echo "Preview API not ready on attempt ${attempt}/${max_attempts} (status: ${status:-curl_failed})"
+            sleep 10
+          done
+
+          echo "Preview API did not become ready in time"
+          [[ -f /tmp/musashi-preview-health.out ]] && cat /tmp/musashi-preview-health.out
+          exit 1
+
       - name: Run selected suite
         env:
           MUSASHI_API_BASE_URL: ${{ steps.api_base.outputs.url }}

@@ -18,6 +18,7 @@ export default async function handler(
 
   // Only accept GET
   if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, OPTIONS');
     res.status(405).json({
       success: false,
       error: 'Method not allowed. Use GET.',

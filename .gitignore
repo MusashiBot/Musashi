@@ -28,7 +28,15 @@ logs/
 .env
 .env.local
 .env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Chrome extension keys
 *.crx
 *.pem
+.env*.local
+
+# Local scratch files
+musashi-extension@1.0.0
+node

@@ -20,6 +20,7 @@ export default async function handler(
 
   // Only accept POST
   if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST, OPTIONS');
     res.status(405).json({
       event_id: 'evt_error',
       signal_type: 'user_interest',
@@ -37,7 +38,18 @@ export default async function handler(
       text: string;
       minConfidence?: number;
       maxResults?: number;
-    };
+    } | null;
+
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      res.status(400).json({
+        event_id: 'evt_error',
+        signal_type: 'user_interest',
+        urgency: 'low',
+        success: false,
+        error: 'Request body must be a JSON object.',
+      });
+      return;
+    }
 
     // Validate request
     if (!body.text || typeof body.text !== 'string') {
@@ -66,7 +78,12 @@ export default async function handler(
     const { text, minConfidence = 0.3, maxResults = 5 } = body;
 
     // Validate numeric parameters
-    if (minConfidence < 0 || minConfidence > 1) {
+    if (
+      typeof minConfidence !== 'number' ||
+      !Number.isFinite(minConfidence) ||
+      minConfidence < 0 ||
+      minConfidence > 1
+    ) {
       res.status(400).json({
         event_id: 'evt_error',
         signal_type: 'user_interest',
@@ -77,7 +94,12 @@ export default async function handler(
       return;
     }
 
-    if (maxResults < 1 || maxResults > 100) {
+    if (
+      typeof maxResults !== 'number' ||
+      !Number.isFinite(maxResults) ||
+      maxResults < 1 ||
+      maxResults > 100
+    ) {
       res.status(400).json({
         event_id: 'evt_error',
         signal_type: 'user_interest',

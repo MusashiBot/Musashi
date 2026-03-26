@@ -30,13 +30,7 @@ npm install
 Use the built-in smoke test first. It exercises `analyze-text`, `arbitrage`, `movers`, and `feed` in one pass.
 
 ```bash
-npx tsx test-sdk.ts
-```
-
-If `tsx` is already available through your package manager setup, this also works:
-
-```bash
-npm exec tsx test-sdk.ts
+node --import tsx test-sdk.ts
 ```
 
 ### 3) SDK Example
@@ -171,7 +165,7 @@ Requires enough price history to produce movers; may be empty even when healthy.
 Use this first when you want a quick confidence check:
 
 ```bash
-npx tsx test-sdk.ts
+node --import tsx test-sdk.ts
 ```
 
 ### Contract test
@@ -271,7 +265,7 @@ Interpretation:
 Use:
 
 ```bash
-npx tsx test-sdk.ts
+node --import tsx test-sdk.ts
 ```
 
 CI / deployment automation:
