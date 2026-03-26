@@ -150,6 +150,7 @@ export interface FeedStats {
 export class MusashiAgent {
   private baseUrl: string;
   private apiKey?: string;
+  private previewBypassSecret?: string;
 
   /**
    * Create a new Musashi Agent
@@ -160,6 +161,25 @@ export class MusashiAgent {
   constructor(baseUrl: string = 'https://musashi-api.vercel.app', apiKey?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.apiKey = apiKey;
+    this.previewBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  }
+
+  private buildHeaders(extraHeaders?: HeadersInit): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...((extraHeaders as Record<string, string>) || {}),
+    };
+
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
+    if (this.previewBypassSecret) {
+      headers['x-vercel-protection-bypass'] = this.previewBypassSecret;
+      headers['x-vercel-set-bypass-cookie'] = 'true';
+    }
+
+    return headers;
   }
 
   /**
@@ -275,13 +295,7 @@ export class MusashiAgent {
   async checkHealth(): Promise<HealthStatus> {
     // Don't use this.request() because it throws on 503 (degraded status)
     const url = `${this.baseUrl}/api/health`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
+    const headers = this.buildHeaders();
 
     const res = await fetch(url, { headers });
     const response = await res.json();
@@ -602,14 +616,7 @@ export class MusashiAgent {
    */
   private async request(path: string, options: RequestInit = {}): Promise<any> {
     const url = `${this.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((options.headers as Record<string, string>) || {}),
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
+    const headers = this.buildHeaders(options.headers);
 
     const response = await fetch(url, {
       ...options,

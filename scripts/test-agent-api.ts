@@ -115,6 +115,8 @@ async function main(): Promise<void> {
   console.log(`Vercel preview bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET ? 'enabled' : 'disabled'}`);
   console.log('');
 
+  await logPreviewBootstrap();
+
   for (const test of tests) {
     try {
       const result = await test.run();
@@ -133,6 +135,24 @@ async function main(): Promise<void> {
 
   if (failures > 0) {
     process.exitCode = 1;
+  }
+}
+
+async function logPreviewBootstrap(): Promise<void> {
+  try {
+    const response = await request('/api/health');
+    console.log(
+      `Preview bootstrap: status=${response.status} content-type=${response.headers.get('content-type') || 'unknown'} final-url=${response.headers.get('x-fetch-final-url') || `${BASE_URL}/api/health`}`,
+    );
+
+    if (response.text && response.text.trim().startsWith('<')) {
+      console.log('Preview bootstrap body looks like HTML instead of JSON');
+    }
+
+    console.log('');
+  } catch (error) {
+    console.log(`Preview bootstrap failed: ${toErrorMessage(error)}`);
+    console.log('');
   }
 }
 
@@ -1132,12 +1152,18 @@ async function request(path: string, init: RequestInit = {}): Promise<HttpResult
       status: response.status,
       text,
       json,
-      headers: response.headers,
+      headers: withSyntheticFinalUrlHeader(response.headers, response.url),
       durationMs: Date.now() - startedAt,
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function withSyntheticFinalUrlHeader(headers: Headers, finalUrl: string): Headers {
+  const clone = new Headers(headers);
+  clone.set('x-fetch-final-url', finalUrl);
+  return clone;
 }
 
 function pass(detail: string): CaseResult {
