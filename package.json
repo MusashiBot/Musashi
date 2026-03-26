@@ -4,6 +4,7 @@
   "description": "Chrome extension that overlays prediction market odds on Twitter/X",
   "scripts": {
     "build": "webpack --mode production",
+    "typecheck:api": "tsc --noEmit --pretty false --target ES2020 --module commonjs --moduleResolution node --strict --esModuleInterop --resolveJsonModule --allowSyntheticDefaultImports --skipLibCheck --lib ES2020,DOM --types node api/cron/collect-tweets.ts api/feed/stats.ts api/markets/movers.ts api/feed.ts api/health.ts src/api/twitter-client.ts api/lib/market-cache.ts",
     "dev": "webpack --mode development --watch",
     "clean": "rm -rf dist",
     "agent": "node --import tsx cli/index.ts",
@@ -31,6 +32,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/chrome": "^0.0.268",
+    "@types/node": "^24.5.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vercel/node": "^3.0.21",
