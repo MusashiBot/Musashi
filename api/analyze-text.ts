@@ -3,6 +3,23 @@ import { KeywordMatcher } from '../src/analysis/keyword-matcher';
 import { generateSignal, TradingSignal } from '../src/analysis/signal-generator';
 import { getMarkets, getArbitrage } from './lib/market-cache';
 
+function isMalformedJsonError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('json') ||
+    message.includes('unexpected token') ||
+    message.includes('request body')
+  );
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -166,6 +183,17 @@ export default async function handler(
 
     res.status(200).json(response);
   } catch (error) {
+    if (isMalformedJsonError(error)) {
+      res.status(400).json({
+        event_id: 'evt_error',
+        signal_type: 'user_interest',
+        urgency: 'low',
+        success: false,
+        error: 'Malformed JSON request body.',
+      });
+      return;
+    }
+
     console.error('[API] Error in analyze-text:', error);
     res.status(500).json({
       event_id: 'evt_error',
