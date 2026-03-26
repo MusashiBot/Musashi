@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
 import type { AnalyzedTweet, FeedResponse, AccountCategory } from '../src/types/feed';
 import { batchGetFromKV, setFeedCache, getFeedCache, getFeedCacheTimestamp } from './lib/cache-helper';
+import { kv } from './lib/vercel-kv';
 
 // ─── KV Storage Keys ───────────────────────────────────────────────────────
 

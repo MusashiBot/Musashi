@@ -38,7 +38,7 @@ Musashi is an **AI-powered prediction market intelligence platform** that conver
 
 ## Prerequisites
 
-- **Node.js**: 20+ and npm
+- **Node.js**: 20+ and pnpm
 - **Google Chrome**: Latest version
 - **Git**: For cloning/pulling updates
 - **Optional**: Vercel CLI for local API testing
@@ -54,10 +54,10 @@ Musashi is an **AI-powered prediction market intelligence platform** that conver
 cd "C:\Users\rotciv\Desktop\Musashi ai"
 
 # Install dependencies (if needed)
-npm install
+pnpm install
 
 # Build the Chrome extension
-npm run build
+pnpm run build
 ```
 
 Expected output: `dist/` folder created with extension files

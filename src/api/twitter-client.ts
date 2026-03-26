@@ -1,7 +1,7 @@
 // Twitter API v2 client for collecting tweets from curated accounts
 
 import { RawTweet } from '../types/feed';
-import { kv } from '@vercel/kv';
+import { kv, setKvWithTtl } from '../../api/lib/vercel-kv';
 
 // ─── Error Classes ─────────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ export class TwitterClient {
 
       // Store in KV cache
       try {
-        await kv.setex(cacheKey, USER_ID_TTL, userId);
+        await setKvWithTtl(cacheKey, USER_ID_TTL, userId);
       } catch (kvError) {
         console.warn(`[Twitter Client] KV cache write failed for @${username}:`, kvError);
         // Continue even if cache write fails
