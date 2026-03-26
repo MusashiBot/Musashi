@@ -168,7 +168,7 @@ export default async function handler(
 
     // Step 4: OPTIMIZED: Batch fetch tweets from KV using mget
     // This reduces N requests → 1 request (massive improvement!)
-    const tweetKeys = tweetIds.map(id => getTweetKey(id));
+    const tweetKeys = tweetIds.map((id: string) => getTweetKey(id));
     const tweets = await batchGetFromKV<AnalyzedTweet>(kv, tweetKeys);
 
     // Step 5: Filter nulls (expired tweets)
