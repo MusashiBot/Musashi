@@ -386,9 +386,11 @@ Supported market categories:
 
 ## Caching & Storage
 
-- **Markets**: Cached for **5 minutes** in-memory (shared across endpoints)
-- **Arbitrage**: Recalculated on each request using cached markets
+- **Markets**: Cached for **20 seconds** in-memory (shared across endpoints, configurable via `MARKET_CACHE_TTL_SECONDS`)
+- **Arbitrage**: Cached for **15 seconds** (configurable via `ARBITRAGE_CACHE_TTL_SECONDS`)
 - **Movers**: Price snapshots stored in **Vercel KV (Redis)** for **7 days**
+
+> **Trading Update**: Cache TTLs reduced from 5 minutes to 15-20 seconds for fresher pricing data. See environment variables section for configuration options.
 
 ### Vercel KV Setup
 
@@ -397,6 +399,15 @@ The movers endpoint requires Vercel KV to persist price history across serverles
 **Environment Variables Required**:
 - `KV_REST_API_URL` - KV REST API endpoint
 - `KV_REST_API_TOKEN` - Authentication token
+
+**Cache Configuration (Optional)**:
+- `MARKET_CACHE_TTL_SECONDS` - Market data cache duration (default: **20 seconds**, was 5 minutes)
+- `ARBITRAGE_CACHE_TTL_SECONDS` - Arbitrage cache duration (default: **15 seconds**, was 5 minutes)
+
+**Note for Trading Agents**: Cache TTLs have been reduced from 5 minutes to 15-20 seconds by default to provide fresher data for trading decisions. You can adjust these values based on your trading strategy:
+- **High-frequency trading**: Set to 10-15 seconds for maximum freshness
+- **Cost optimization**: Set to 60-300 seconds to reduce external API calls
+- **Production recommended**: Keep at 15-30 seconds for balance
 
 ---
 
