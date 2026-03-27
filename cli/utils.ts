@@ -42,7 +42,6 @@ export function getUrgencyColor(urgency: string): string {
 export function getLogColor(level: LogLevel): string {
   switch (level) {
     case 'error': return 'red-fg';
-    case 'warn': return 'yellow-fg';
     case 'success': return 'green-fg';
     default: return 'white-fg';
   }
@@ -51,7 +50,6 @@ export function getLogColor(level: LogLevel): string {
 export function getLogIcon(level: LogLevel): string {
   switch (level) {
     case 'error': return '✗';
-    case 'warn': return '⚠';
     case 'success': return '✓';
     default: return 'ℹ';
   }

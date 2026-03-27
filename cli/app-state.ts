@@ -63,5 +63,7 @@ export interface AppState {
     minMoverChange: number;    // 0.05 = 5%
     feedLimit: number;         // tweets to show
     logLines: number;          // logs to show in panel
+    category?: string;         // API category filter, e.g. crypto
+    topic?: string;            // Local topic filter, e.g. bitcoin
   };
 }

@@ -32,10 +32,23 @@ export class Header extends BaseComponent {
       : 'Never';
 
     const loadingIndicator = state.isLoading ? '{yellow-fg}●{/yellow-fg}' : '{green-fg}●{/green-fg}';
+    const filters: string[] = [];
+
+    if (state.settings.category) {
+      filters.push(`category=${state.settings.category}`);
+    }
+
+    if (state.settings.topic) {
+      filters.push(`topic=${state.settings.topic}`);
+    }
+
+    const filtersText = filters.length > 0
+      ? ` • Filters: ${filters.join(', ')}`
+      : '';
 
     this.box.setContent(
       `{center}{bold}{cyan-fg}Musashi AI{/cyan-fg}{/bold} • Real-time Prediction Market Intelligence{/center}\n` +
-      `{center}API: https://musashi-api.vercel.app • Last Update: ${lastUpdate} ${loadingIndicator} • Press {bold}Q{/bold} to quit, {bold}R{/bold} to refresh{/center}`
+      `{center}API: https://musashi-api.vercel.app • Last Update: ${lastUpdate} ${loadingIndicator}${filtersText} • Press {bold}Q{/bold} to quit, {bold}R{/bold} to refresh{/center}`
     );
   }
 }
