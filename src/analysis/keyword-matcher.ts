@@ -1031,7 +1031,7 @@ export class KeywordMatcher {
 
   constructor(
     markets: Market[] = [],
-    minConfidence: number = 0.22, // Raised from 0.12 to reduce false positives
+    minConfidence: number = 0.15, // Balanced threshold - not too strict, not too loose
     maxResults: number = 5
   ) {
     this.markets = markets;
@@ -1044,8 +1044,13 @@ export class KeywordMatcher {
    * IMPROVED: Now filters out casual mentions and applies context scoring
    */
   public match(tweetText: string): MarketMatch[] {
+    console.log(`[Matcher] Analyzing tweet: "${tweetText.slice(0, 60)}..."`);
+
     // Filter out very short tweets (likely noise or greetings)
-    if (tweetText.trim().length < 20) return [];
+    if (tweetText.trim().length < 20) {
+      console.log('[Matcher] Tweet too short, skipping');
+      return [];
+    }
 
     // Filter out promotional content
     if (isPromotionalContent(tweetText)) {
@@ -1055,31 +1060,44 @@ export class KeywordMatcher {
 
     // Step 1: Extract entities (people, tickers, organizations, dates)
     const entities = extractEntities(tweetText);
+    console.log('[Matcher] Entities:', entities.all);
 
     // Step 2: Extract raw tokens (unigrams + bigrams + trigrams) from tweet
     const rawTokens = this.extractKeywords(tweetText);
+    console.log('[Matcher] Extracted', rawTokens.length, 'tokens:', rawTokens.slice(0, 10));
     if (rawTokens.length === 0) return [];
 
     // Step 3: Expand with synonyms — done once, reused for all markets
     const expandedTokens  = expandWithSynonyms(rawTokens);
     const rawTokenSet      = new Set(rawTokens);
     const expandedTokenSet = new Set(expandedTokens);
+    console.log('[Matcher] After synonym expansion:', expandedTokens.length, 'tokens');
 
     const matches: MarketMatch[] = [];
+    let candidateCount = 0;
 
     for (const market of this.markets) {
       const result = this.scoreMarket(market, rawTokenSet, expandedTokenSet, entities, tweetText);
 
-      // IMPROVED: Filter out casual mentions
       if (result.confidence >= this.minConfidence) {
-        if (!isCasualMention(tweetText, result.matchedKeywords)) {
+        candidateCount++;
+
+        // IMPROVED: Filter out casual mentions
+        if (isCasualMention(tweetText, result.matchedKeywords)) {
+          console.log(`[Matcher] Filtered casual mention: ${market.title.slice(0, 40)} (${result.confidence.toFixed(3)})`);
+        } else {
           matches.push(result);
         }
       }
     }
 
+    console.log(`[Matcher] Found ${candidateCount} candidates above threshold (${this.minConfidence}), ${matches.length} after filtering`);
+
     matches.sort((a, b) => b.confidence - a.confidence);
-    return matches.slice(0, this.maxResults);
+    const results = matches.slice(0, this.maxResults);
+    console.log(`[Matcher] Returning ${results.length} matches`);
+
+    return results;
   }
 
   /**
@@ -1217,13 +1235,20 @@ export class KeywordMatcher {
       multiWordMatches,
     }, market, matchedKeywords);
 
-    // IMPROVED: Apply context score multiplier
+    // IMPROVED: Apply context score boost (additive, not multiplicative)
     // Context score ranges 0-1, where higher means tweet is more likely ABOUT the market
+    // We ADD a bonus for good context instead of MULTIPLYING (which was too punishing)
     const contextScore = analyzeContext(tweetText, market);
-    confidence = confidence * (0.7 + contextScore * 0.3); // Context influences 30% of final score
+    const contextBonus = (contextScore - 0.5) * 0.15; // Ranges from -0.075 to +0.075
+    confidence = confidence + contextBonus;
 
     // Cap between 0 and 1
     confidence = Math.min(1.0, Math.max(0, confidence));
+
+    // Debug logging
+    if (confidence >= 0.1) {
+      console.log(`[Matcher] "${tweetText.slice(0, 50)}..." → ${market.title.slice(0, 40)}: ${confidence.toFixed(3)} (context: ${contextScore.toFixed(2)}, bonus: ${contextBonus >= 0 ? '+' : ''}${contextBonus.toFixed(3)})`);
+    }
 
     return { market, confidence, matchedKeywords };
   }
