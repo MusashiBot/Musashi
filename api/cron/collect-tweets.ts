@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
 import { twitterClient } from '../../src/api/twitter-client';
 import { KeywordMatcher } from '../../src/analysis/keyword-matcher';
 import { analyzeSentiment } from '../../src/analysis/sentiment-analyzer';
 import { generateSignal } from '../../src/analysis/signal-generator';
 import { getMarkets, getArbitrage } from '../lib/market-cache';
 import { batchGetFromKV } from '../lib/cache-helper';
+import { kv, listKvKeys, setKvWithTtl } from '../lib/vercel-kv';
 import {
   TWITTER_ACCOUNTS,
   getHighPriorityAccounts,
@@ -254,7 +254,7 @@ export default async function handler(
       duration_ms: Date.now() - startTime,
     };
 
-    await kv.setex(CRON_METADATA_KEY, TWEET_TTL_SECONDS, cronMetadata);
+    await setKvWithTtl(CRON_METADATA_KEY, TWEET_TTL_SECONDS, cronMetadata);
 
     console.log(`[Cron] Complete: ${totalStored} tweets stored (${totalCollected} collected, ${totalAnalyzed} analyzed) in ${cronMetadata.duration_ms}ms`);
 
@@ -290,7 +290,7 @@ export default async function handler(
  */
 async function storeTweet(tweet: AnalyzedTweet): Promise<void> {
   const key = getTweetKey(tweet.tweet.id);
-  await kv.setex(key, TWEET_TTL_SECONDS, tweet);
+  await setKvWithTtl(key, TWEET_TTL_SECONDS, tweet);
 }
 
 /**
@@ -299,12 +299,12 @@ async function storeTweet(tweet: AnalyzedTweet): Promise<void> {
 async function updateFeedIndices(): Promise<void> {
   try {
     // Get all tweet keys
-    const tweetKeys = await kv.keys('tweet:*');
-    const tweetIds = tweetKeys.map(key => key.replace('tweet:', ''));
+    const tweetKeys = await listKvKeys('tweet:*');
+    const tweetIds = tweetKeys.map((key: string) => key.replace('tweet:', ''));
 
     // OPTIMIZED: Batch fetch all tweets using mget instead of individual gets
     // This reduces N requests → 1 request
-    const allTweetKeys = tweetIds.map(id => getTweetKey(id));
+    const allTweetKeys = tweetIds.map((id: string) => getTweetKey(id));
     const tweets = await batchGetFromKV<AnalyzedTweet>(kv, allTweetKeys);
 
     const validTweets = tweets.filter(t => t !== null) as AnalyzedTweet[];
@@ -316,7 +316,7 @@ async function updateFeedIndices(): Promise<void> {
 
     // Build feed:latest (last 200 tweet IDs)
     const latestTweetIds = validTweets.slice(0, 200).map(t => t.tweet.id);
-    await kv.setex(FEED_LATEST_KEY, TWEET_TTL_SECONDS, latestTweetIds);
+    await setKvWithTtl(FEED_LATEST_KEY, TWEET_TTL_SECONDS, latestTweetIds);
 
     // Build feed:category:{category} indices (last 100 per category)
     const categoriesMap = new Map<AccountCategory, string[]>();
@@ -334,7 +334,7 @@ async function updateFeedIndices(): Promise<void> {
 
     // Store category indices
     for (const [category, tweetIds] of categoriesMap.entries()) {
-      await kv.setex(getCategoryKey(category), TWEET_TTL_SECONDS, tweetIds);
+      await setKvWithTtl(getCategoryKey(category), TWEET_TTL_SECONDS, tweetIds);
     }
 
     console.log(`[Cron] Updated feed indices: ${latestTweetIds.length} in latest, ${categoriesMap.size} categories`);

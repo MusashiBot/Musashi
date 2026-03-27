@@ -97,17 +97,17 @@ Total: 10 files, 776 lines
 
 ### Quick Start
 ```bash
-npm run agent
+pnpm run agent
 ```
 
 ```bash
-MUSASHI_CLI_POLL_MS=15000 MUSASHI_CLI_LOG_LINES=20 npm run agent
+MUSASHI_CLI_POLL_MS=15000 MUSASHI_CLI_LOG_LINES=20 pnpm run agent
 ```
 
 ### Production Build
 ```bash
-npm run agent:build
-npm run agent:start
+pnpm run agent:build
+pnpm run agent:start
 ```
 
 ---
@@ -364,19 +364,19 @@ The CLI is **production-ready** and can be:
 
 1. **Run locally:**
    ```bash
-   npm run agent
+   pnpm run agent
    ```
 
 2. **Distributed as npm package:**
    ```bash
-   npm publish
-   npm install -g musashi-cli
+   pnpm publish
+   pnpm add -g musashi-cli
    musashi-agent
    ```
 
 3. **Bundled as binary:**
    ```bash
-   npm run agent:build
+   pnpm run agent:build
    # Distribute dist/agent.js
    ```
 
@@ -406,7 +406,7 @@ The CLI is **production-ready** and can be:
 
 Run it now:
 ```bash
-npm run agent
+pnpm run agent
 ```
 
 🚀

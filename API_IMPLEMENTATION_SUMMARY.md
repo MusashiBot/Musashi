@@ -88,12 +88,12 @@ All endpoints now fetch from:
 1. Install dependencies:
    ```bash
    cd "C:\Users\rotciv\Desktop\Musashi ai"
-   npm install
+   pnpm install
    ```
 
 2. Start dev server:
    ```bash
-   npm run dev
+   pnpm run dev
    ```
 
 3. Run test script:

@@ -1,4 +1,8 @@
 import { MusashiAgent } from '../src/sdk/musashi-agent';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 
 type Level = 'pass' | 'warn' | 'fail';
 
@@ -30,6 +34,9 @@ const COLD_SAMPLE_SIZE = readIntEnv('MUSASHI_TEST_COLD_SAMPLES', 10);
 const INCLUDE_STRESS = process.env.MUSASHI_TEST_INCLUDE_STRESS === '1';
 const CONCURRENCY_LEVEL = readIntEnv('MUSASHI_TEST_CONCURRENCY', 20);
 const BURST_REQUESTS = readIntEnv('MUSASHI_TEST_BURST_REQUESTS', 50);
+const COOKIE_JAR_PATH = join(mkdtempSync(join(tmpdir(), 'musashi-agent-api-')), 'cookies.txt');
+
+installCurlBackedFetch();
 
 async function main(): Promise<void> {
   const tests: Array<{ name: string; run: () => Promise<CaseResult> }> = [
@@ -115,6 +122,8 @@ async function main(): Promise<void> {
   console.log(`Vercel preview bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET ? 'enabled' : 'disabled'}`);
   console.log('');
 
+  await logPreviewBootstrap();
+
   for (const test of tests) {
     try {
       const result = await test.run();
@@ -133,6 +142,24 @@ async function main(): Promise<void> {
 
   if (failures > 0) {
     process.exitCode = 1;
+  }
+}
+
+async function logPreviewBootstrap(): Promise<void> {
+  try {
+    const response = await request('/api/health');
+    console.log(
+      `Preview bootstrap: status=${response.status} content-type=${response.headers.get('content-type') || 'unknown'} final-url=${response.headers.get('x-fetch-final-url') || `${BASE_URL}/api/health`}`,
+    );
+
+    if (response.text && response.text.trim().startsWith('<')) {
+      console.log('Preview bootstrap body looks like HTML instead of JSON');
+    }
+
+    console.log('');
+  } catch (error) {
+    console.log(`Preview bootstrap failed: ${toErrorMessage(error)}`);
+    console.log('');
   }
 }
 
@@ -1097,47 +1124,229 @@ async function testBurstTrafficStability(): Promise<CaseResult> {
 }
 
 async function request(path: string, init: RequestInit = {}): Promise<HttpResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const startedAt = Date.now();
 
   try {
-    const headers = new Headers(init.headers || {});
-    if (!headers.has('Content-Type') && init.body) {
-      headers.set('Content-Type', 'application/json');
-    }
-    if (VERCEL_AUTOMATION_BYPASS_SECRET) {
-      headers.set('x-vercel-protection-bypass', VERCEL_AUTOMATION_BYPASS_SECRET);
-      headers.set('x-vercel-set-bypass-cookie', 'true');
-    }
+    const response = await curlRequest(`${BASE_URL}${path}`, init);
+    return withParsedJson(response, Date.now() - startedAt);
+  } finally {
+  }
+}
 
-    const response = await fetch(`${BASE_URL}${path}`, {
-      ...init,
-      headers,
-      signal: controller.signal,
+async function curlRequest(url: string, init: RequestInit = {}): Promise<{
+  status: number;
+  text: string;
+  headers: Headers;
+  finalUrl: string;
+}> {
+  const headers = new Headers(init.headers || {});
+  if (!headers.has('Content-Type') && init.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (VERCEL_AUTOMATION_BYPASS_SECRET) {
+    headers.set('x-vercel-protection-bypass', VERCEL_AUTOMATION_BYPASS_SECRET);
+    headers.set('x-vercel-set-bypass-cookie', 'true');
+  }
+
+  const args = [
+    '--silent',
+    '--show-error',
+    '--location',
+    '--max-redirs',
+    '10',
+    '--connect-timeout',
+    String(Math.max(1, Math.ceil(TIMEOUT_MS / 1000))),
+    '--max-time',
+    String(Math.max(1, Math.ceil(TIMEOUT_MS / 1000))),
+    '--cookie',
+    COOKIE_JAR_PATH,
+    '--cookie-jar',
+    COOKIE_JAR_PATH,
+    '--dump-header',
+    '-',
+    '--write-out',
+    '\n__CURL_META__%{http_code}\t%{url_effective}',
+  ];
+  const method = (init.method || 'GET').toUpperCase();
+
+  if (method === 'HEAD') {
+    args.push('--head');
+  } else {
+    args.push('--request', method);
+  }
+
+  headers.forEach((value, key) => {
+    args.push('--header', `${key}: ${value}`);
+  });
+
+  if (init.body !== undefined && init.body !== null) {
+    args.push('--data-binary', stringifyRequestBody(init.body));
+  }
+
+  args.push(url);
+
+  const output = await runCurl(args);
+  return parseCurlOutput(output);
+}
+
+function runCurl(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('curl', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const text = await response.text();
-    let json: any = null;
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, TIMEOUT_MS + 250);
 
-    if (text) {
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk;
+    });
+    child.on('error', error => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on('close', code => {
+      clearTimeout(timeout);
+
+      if (timedOut) {
+        reject(new Error(`request timed out after ${TIMEOUT_MS}ms`));
+        return;
       }
-    }
 
-    return {
-      status: response.status,
-      text,
-      json,
-      headers: response.headers,
-      durationMs: Date.now() - startedAt,
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `curl exited with code ${code}`));
+        return;
+      }
+
+      resolve(stdout);
+    });
+  });
+}
+
+function installCurlBackedFetch(): void {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const requestLike = input instanceof Request ? input : null;
+    const url = requestLike ? requestLike.url : String(input);
+    const mergedInit: RequestInit = {
+      method: requestLike?.method,
+      headers: requestLike?.headers,
+      body: requestLike?.body ? await requestLike.text() : undefined,
+      ...init,
     };
-  } finally {
-    clearTimeout(timeout);
+
+    const response = await curlRequest(url, mergedInit);
+    return new Response(response.text, {
+      status: response.status,
+      headers: response.headers,
+    });
+  }) as typeof fetch;
+}
+
+function parseCurlOutput(output: string): { status: number; text: string; headers: Headers; finalUrl: string } {
+  const marker = '\n__CURL_META__';
+  const markerIndex = output.lastIndexOf(marker);
+  if (markerIndex === -1) {
+    throw new Error('curl response metadata missing');
   }
+
+  const payload = output.slice(0, markerIndex);
+  const meta = output.slice(markerIndex + marker.length).trim();
+  const tabIndex = meta.indexOf('\t');
+  if (tabIndex === -1) {
+    throw new Error(`invalid curl metadata: ${meta}`);
+  }
+
+  const status = Number(meta.slice(0, tabIndex));
+  const finalUrl = meta.slice(tabIndex + 1);
+  const parsed = splitCurlHeadersAndBody(payload);
+
+  return {
+    status,
+    text: parsed.body,
+    headers: withSyntheticFinalUrlHeader(parsed.headers, finalUrl),
+    finalUrl,
+  };
+}
+
+function splitCurlHeadersAndBody(payload: string): { headers: Headers; body: string } {
+  const normalized = payload.replace(/\r\n/g, '\n');
+  const separator = '\n\n';
+  const lastSeparatorIndex = normalized.lastIndexOf(separator);
+
+  if (lastSeparatorIndex === -1) {
+    return {
+      headers: new Headers(),
+      body: normalized,
+    };
+  }
+
+  const headerBlock = normalized.slice(0, lastSeparatorIndex);
+  const body = normalized.slice(lastSeparatorIndex + separator.length);
+  const headerSections = headerBlock
+    .split(separator)
+    .filter(section => /^HTTP\/\d(?:\.\d)? \d{3}/.test(section));
+  const finalHeaderSection = headerSections[headerSections.length - 1] || '';
+  const responseHeaders = new Headers();
+
+  for (const line of finalHeaderSection.split('\n').slice(1)) {
+    const index = line.indexOf(':');
+    if (index === -1) continue;
+    const key = line.slice(0, index).trim();
+    const value = line.slice(index + 1).trim();
+    if (key) responseHeaders.append(key, value);
+  }
+
+  return {
+    headers: responseHeaders,
+    body,
+  };
+}
+
+function stringifyRequestBody(body: BodyInit | null): string {
+  if (typeof body === 'string') return body;
+  if (body instanceof URLSearchParams) return body.toString();
+  if (body instanceof ArrayBuffer) return Buffer.from(body).toString('utf8');
+  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer, body.byteOffset, body.byteLength).toString('utf8');
+  return String(body);
+}
+
+function withParsedJson(
+  response: { status: number; text: string; headers: Headers; finalUrl: string },
+  durationMs: number,
+): HttpResult {
+  let json: any = null;
+
+  if (response.text) {
+    try {
+      json = JSON.parse(response.text);
+    } catch {
+      json = null;
+    }
+  }
+
+  return {
+    status: response.status,
+    text: response.text,
+    json,
+    headers: response.headers,
+    durationMs,
+  };
+}
+
+function withSyntheticFinalUrlHeader(headers: Headers, finalUrl: string): Headers {
+  const clone = new Headers(headers);
+  clone.set('x-fetch-final-url', finalUrl);
+  return clone;
 }
 
 function pass(detail: string): CaseResult {
@@ -1178,12 +1387,36 @@ function extractError(response: HttpResult): string {
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
-    return error.name === 'AbortError'
-      ? `request timed out after ${TIMEOUT_MS}ms`
-      : error.message;
+    if (error.name === 'AbortError') {
+      return `request timed out after ${TIMEOUT_MS}ms`;
+    }
+
+    const cause = formatErrorCause((error as Error & { cause?: unknown }).cause);
+    return cause ? `${error.message} (${cause})` : error.message;
   }
 
   return String(error);
+}
+
+function formatErrorCause(cause: unknown): string {
+  if (!cause) {
+    return '';
+  }
+
+  if (cause instanceof Error) {
+    const code = (cause as Error & { code?: string }).code;
+    return code ? `${cause.name}: ${cause.message}; code=${code}` : `${cause.name}: ${cause.message}`;
+  }
+
+  if (typeof cause === 'object') {
+    try {
+      return JSON.stringify(cause);
+    } catch {
+      return String(cause);
+    }
+  }
+
+  return String(cause);
 }
 
 function readIntEnv(name: string, fallback: number): number {

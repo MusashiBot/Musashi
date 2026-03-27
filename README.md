@@ -236,7 +236,7 @@ Musashi/
 
 ### Prerequisites
 
-- Node.js 20+ and npm
+- Node.js 20+ and pnpm
 - Google Chrome
 - Git
 
@@ -244,22 +244,22 @@ Musashi/
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Build Chrome extension for production
-npm run build
+pnpm run build
 
 # Build and watch for changes (development)
-npm run dev
+pnpm run dev
 
 # Clean build folder
-npm run clean
+pnpm run clean
 ```
 
 ### Making Changes to Extension
 
 1. Edit source files in `src/`
-2. Run `npm run build` to rebuild
+2. Run `pnpm run build` to rebuild
 3. Go to `chrome://extensions`
 4. Click reload icon on Musashi card
 5. Refresh Twitter/X tab to see changes
@@ -267,11 +267,8 @@ npm run clean
 ### Testing API Endpoints Locally
 
 ```bash
-# Install Vercel CLI
-npm install -g vercel
-
 # Run local development server
-vercel dev
+pnpm exec vercel dev
 
 # Endpoints available at:
 # http://localhost:3000/api/analyze-text
@@ -284,10 +281,10 @@ vercel dev
 
 ```bash
 # Login to Vercel
-vercel login
+pnpm exec vercel login
 
 # Deploy to production
-vercel --prod
+pnpm exec vercel --prod
 ```
 
 ---

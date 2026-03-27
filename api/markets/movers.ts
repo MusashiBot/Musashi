@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
 import { Market } from '../../src/types/market';
 import { getMarkets } from '../lib/market-cache';
+import { kv, listKvKeys, setKvWithTtl } from '../lib/vercel-kv';
 
 /**
  * Vercel KV-based price tracking for persistent movers detection
@@ -74,10 +74,10 @@ async function recordPriceSnapshots(markets: Market[]): Promise<void> {
         snapshots.push(newSnapshot);
 
         // Keep only recent snapshots (within TTL)
-        const filtered = snapshots.filter(s => s.timestamp >= cutoff);
+        const filtered = snapshots.filter((s: PriceSnapshot) => s.timestamp >= cutoff);
 
         // Store back to KV with TTL
-        await kv.setex(key, HISTORY_TTL_SECONDS, filtered);
+        await setKvWithTtl(key, HISTORY_TTL_SECONDS, filtered);
       })
     );
   }
@@ -177,7 +177,7 @@ async function detectMovers(markets: Market[], minChange: number): Promise<Marke
 async function getTrackedMarketCount(): Promise<number> {
   try {
     // Just count keys, don't fetch all snapshot arrays
-    const keys = await kv.keys(`${SNAPSHOT_KEY_PREFIX}*`);
+    const keys = await listKvKeys(`${SNAPSHOT_KEY_PREFIX}*`);
     return keys.length;
   } catch (error) {
     console.error('[Movers API] Failed to get market count:', error);

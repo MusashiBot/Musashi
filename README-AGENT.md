@@ -4,7 +4,7 @@ Single source of truth for building and running agents with Musashi.
 
 This guide covers:
 - TypeScript SDK (`src/sdk/musashi-agent.ts`)
-- Terminal CLI (`npm run agent`)
+- Terminal CLI (`pnpm run agent`)
 - Agent-facing API behavior and troubleshooting
 
 ## What Musashi Provides
@@ -22,7 +22,7 @@ The Chrome extension is optional UI. Agent integrations should use the SDK or di
 ### 1) Install
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 2) Verify The SDK And API
@@ -52,14 +52,14 @@ console.log({ feed: feed.length, arbs: arbs.length, movers: movers.length });
 ### 4) Run Terminal CLI
 
 ```bash
-npm run agent
+pnpm run agent
 ```
 
 Build/start variant:
 
 ```bash
-npm run agent:build
-npm run agent:start
+pnpm run agent:build
+pnpm run agent:start
 ```
 
 ### 5) Run The Contract Test Suite
@@ -67,23 +67,23 @@ npm run agent:start
 Run the broader API contract test when you want a stronger regression check:
 
 ```bash
-npm run agent:test:api
+pnpm run agent:test:api
 ```
 
 Common variants:
 
 ```bash
 # Local API
-MUSASHI_API_BASE_URL=http://127.0.0.1:3000 npm run agent:test:api
+MUSASHI_API_BASE_URL=http://127.0.0.1:3000 pnpm run agent:test:api
 
 # Performance coverage
-npm run agent:test:api:perf
+pnpm run agent:test:api:perf
 
 # Stress coverage
-npm run agent:test:api:stress
+pnpm run agent:test:api:stress
 
 # Contract + perf + stress
-npm run agent:test:api:full
+pnpm run agent:test:api:full
 ```
 
 ## SDK Usage
@@ -117,16 +117,16 @@ CLI entry: `cli/index.ts`
 
 ```bash
 # Poll every 15s (default: 10000)
-MUSASHI_CLI_POLL_MS=15000 npm run agent
+MUSASHI_CLI_POLL_MS=15000 pnpm run agent
 
 # Log lines to show in panel (default: 10)
-MUSASHI_CLI_LOG_LINES=20 npm run agent
+MUSASHI_CLI_LOG_LINES=20 pnpm run agent
 
 # Feed page size (default: 10)
-MUSASHI_CLI_FEED_LIMIT=20 npm run agent
+MUSASHI_CLI_FEED_LIMIT=20 pnpm run agent
 
 # Threshold tuning
-MUSASHI_CLI_MIN_ARB_SPREAD=0.01 MUSASHI_CLI_MIN_MOVER_CHANGE=0.03 npm run agent
+MUSASHI_CLI_MIN_ARB_SPREAD=0.01 MUSASHI_CLI_MIN_MOVER_CHANGE=0.03 pnpm run agent
 ```
 
 ### Keyboard
@@ -173,40 +173,40 @@ node --import tsx test-sdk.ts
 Use this for regular regression checks:
 
 ```bash
-npm run agent:test:api
+pnpm run agent:test:api
 ```
 
 Common scenarios:
 
 ```bash
 # 1) Regular regression check against production.
-npm run agent:test:api
+pnpm run agent:test:api
 
 # 2) Test a local API before deploy.
-MUSASHI_API_BASE_URL=http://127.0.0.1:3000 npm run agent:test:api
+MUSASHI_API_BASE_URL=http://127.0.0.1:3000 pnpm run agent:test:api
 
 # 3) Run performance checks.
 # Includes warm-latency sampling and the best-effort cold-start probe.
-npm run agent:test:api:perf
+pnpm run agent:test:api:perf
 
 # 4) Run stress checks.
 # Includes concurrency and burst traffic coverage.
-npm run agent:test:api:stress
+pnpm run agent:test:api:stress
 
 # 5) Run everything in one pass.
-npm run agent:test:api:full
+pnpm run agent:test:api:full
 
 # 6) Performance tuning.
 # Increase idle time or sample count for a less noisy cold-start estimate.
-MUSASHI_TEST_COLD_IDLE_MS=65000 MUSASHI_TEST_COLD_SAMPLES=3 npm run agent:test:api:perf
+MUSASHI_TEST_COLD_IDLE_MS=65000 MUSASHI_TEST_COLD_SAMPLES=3 pnpm run agent:test:api:perf
 
 # 7) Stress tuning.
 # Raise concurrency and burst size when you intentionally want a heavier load.
-MUSASHI_TEST_CONCURRENCY=20 MUSASHI_TEST_BURST_REQUESTS=50 npm run agent:test:api:stress
+MUSASHI_TEST_CONCURRENCY=20 MUSASHI_TEST_BURST_REQUESTS=50 pnpm run agent:test:api:stress
 
 # 8) Slower environments or deployed usage-audit checks.
-MUSASHI_TEST_TIMEOUT_MS=30000 npm run agent:test:api
-API_USAGE_ADMIN_KEY=your-key npm run agent:test:api
+MUSASHI_TEST_TIMEOUT_MS=30000 pnpm run agent:test:api
+API_USAGE_ADMIN_KEY=your-key pnpm run agent:test:api
 ```
 
 What it covers:
@@ -227,7 +227,7 @@ How to read results:
 - `FAIL`: contract mismatch, bad status code, malformed payload, timeout, or network failure
 
 Cold-start note:
-- `npm run agent:test:api:perf` includes both warm benchmarks and a best-effort cold-start probe
+- `pnpm run agent:test:api:perf` includes both warm benchmarks and a best-effort cold-start probe
 - The cold-start probe is still a client-side approximation, not proof that the serverless runtime truly cold-started
 - The probe waits idle, measures one request, then immediately measures a follow-up request on the same endpoint
 - Useful outputs are `cold_avg`, `warm_avg`, and `delta`
@@ -235,10 +235,10 @@ Cold-start note:
 - Increase `MUSASHI_TEST_COLD_SAMPLES` for a less noisy average, at the cost of longer runtime
 
 Recommended workflow:
-- Use plain `npm run agent:test:api` for regular regression checks
-- Use `npm run agent:test:api:perf` when you want both warm-latency and cold-start measurements
-- Use `npm run agent:test:api:stress` only when you intentionally want concurrency and burst coverage
-- Use `npm run agent:test:api:full` when you want contract, perf, and stress in one run
+- Use plain `pnpm run agent:test:api` for regular regression checks
+- Use `pnpm run agent:test:api:perf` when you want both warm-latency and cold-start measurements
+- Use `pnpm run agent:test:api:stress` only when you intentionally want concurrency and burst coverage
+- Use `pnpm run agent:test:api:full` when you want contract, perf, and stress in one run
 - Treat repeated `WARN`/`FAIL` results as contract gaps in the deployed API, not as flaky test noise
 
 ## Troubleshooting

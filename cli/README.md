@@ -8,7 +8,7 @@ Use:
 Quick commands:
 
 ```bash
-npm run agent
-npm run agent:build
-npm run agent:start
+pnpm run agent
+pnpm run agent:build
+pnpm run agent:start
 ```

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
 import type { AnalyzedTweet, FeedResponse, AccountCategory } from '../src/types/feed';
 import { batchGetFromKV, setFeedCache, getFeedCache, getFeedCacheTimestamp } from './lib/cache-helper';
+import { kv } from './lib/vercel-kv';
 
 // ─── KV Storage Keys ───────────────────────────────────────────────────────
 
@@ -168,7 +168,7 @@ export default async function handler(
 
     // Step 4: OPTIMIZED: Batch fetch tweets from KV using mget
     // This reduces N requests → 1 request (massive improvement!)
-    const tweetKeys = tweetIds.map(id => getTweetKey(id));
+    const tweetKeys = tweetIds.map((id: string) => getTweetKey(id));
     const tweets = await batchGetFromKV<AnalyzedTweet>(kv, tweetKeys);
 
     // Step 5: Filter nulls (expired tweets)
