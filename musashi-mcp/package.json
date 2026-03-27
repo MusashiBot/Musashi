@@ -1,0 +1,27 @@
+{
+  "name": "musashi-mcp-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Musashi MCP Server - Prediction Market Intelligence for AI Agents",
+  "author": "Musashi Team",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "prettier": "^3.1.1",
+    "eslint": "^8.56.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
