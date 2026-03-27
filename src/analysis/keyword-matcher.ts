@@ -1,8 +1,11 @@
 // Keyword-based market matcher
 // Uses word-boundary matching, synonym expansion, phrase extraction, and entity detection
+// IMPROVED: Now with context-aware scoring to understand tweet relevance
 
 import { Market, MarketMatch } from '../types/market';
 import { extractEntities, isEntity, ExtractedEntities } from './entity-extractor';
+import { analyzeContext, isCasualMention } from './context-scorer';
+import { extractMeaningfulPhrases, scorePhraseImportance } from './phrase-detector';
 
 // ─── Stop words ──────────────────────────────────────────────────────────────
 
@@ -1038,10 +1041,17 @@ export class KeywordMatcher {
 
   /**
    * Match a tweet to relevant markets, returning results sorted by confidence.
+   * IMPROVED: Now filters out casual mentions and applies context scoring
    */
   public match(tweetText: string): MarketMatch[] {
     // Filter out very short tweets (likely noise or greetings)
     if (tweetText.trim().length < 20) return [];
+
+    // Filter out promotional content
+    if (isPromotionalContent(tweetText)) {
+      console.log('[Matcher] Filtered promotional content');
+      return [];
+    }
 
     // Step 1: Extract entities (people, tickers, organizations, dates)
     const entities = extractEntities(tweetText);
@@ -1058,9 +1068,13 @@ export class KeywordMatcher {
     const matches: MarketMatch[] = [];
 
     for (const market of this.markets) {
-      const result = this.scoreMarket(market, rawTokenSet, expandedTokenSet, entities);
+      const result = this.scoreMarket(market, rawTokenSet, expandedTokenSet, entities, tweetText);
+
+      // IMPROVED: Filter out casual mentions
       if (result.confidence >= this.minConfidence) {
-        matches.push(result);
+        if (!isCasualMention(tweetText, result.matchedKeywords)) {
+          matches.push(result);
+        }
       }
     }
 
@@ -1071,6 +1085,7 @@ export class KeywordMatcher {
   /**
    * Extract and clean keywords from tweet text.
    * Returns unigrams + bigrams + trigrams, filtered for noise.
+   * IMPROVED: Now also extracts meaningful phrases dynamically
    */
   private extractKeywords(text: string): string[] {
     let normalized = text.toLowerCase();
@@ -1089,6 +1104,9 @@ export class KeywordMatcher {
     // Generate unigrams + bigrams + trigrams
     const phrases = extractPhrases(normalized);
 
+    // IMPROVED: Extract meaningful phrases using dynamic detection
+    const meaningfulPhrases = extractMeaningfulPhrases(text);
+
     // Filter: single tokens must pass stop-word + noise-word checks
     const filtered = phrases.filter(token => {
       if (token.includes(' ')) {
@@ -1102,18 +1120,20 @@ export class KeywordMatcher {
       );
     });
 
-    // Merge with hashtags and deduplicate
-    return [...new Set([...filtered, ...hashtags])];
+    // Merge with hashtags, meaningful phrases, and deduplicate
+    return [...new Set([...filtered, ...hashtags, ...meaningfulPhrases])];
   }
 
   /**
    * Score a single market against the pre-computed tweet token sets.
+   * IMPROVED: Now includes context scoring
    */
   private scoreMarket(
     market: Market,
     rawTokenSet: Set<string>,
     expandedTokenSet: Set<string>,
-    entities: ExtractedEntities
+    entities: ExtractedEntities,
+    tweetText: string
   ): MarketMatch {
     const matchedKeywords: string[] = [];
     let exactMatches   = 0;
@@ -1188,7 +1208,7 @@ export class KeywordMatcher {
       }
     }
 
-    const confidence = computeScore({
+    let confidence = computeScore({
       exactMatches,
       synonymMatches,
       titleMatches,
@@ -1196,6 +1216,14 @@ export class KeywordMatcher {
       totalChecked: explicitKeywords.length,
       multiWordMatches,
     }, market, matchedKeywords);
+
+    // IMPROVED: Apply context score multiplier
+    // Context score ranges 0-1, where higher means tweet is more likely ABOUT the market
+    const contextScore = analyzeContext(tweetText, market);
+    confidence = confidence * (0.7 + contextScore * 0.3); // Context influences 30% of final score
+
+    // Cap between 0 and 1
+    confidence = Math.min(1.0, Math.max(0, confidence));
 
     return { market, confidence, matchedKeywords };
   }
