@@ -9,6 +9,7 @@ import { ArbitrageOpportunity, Market } from '../types/market';
 import { analyzeTextWithArbitrage } from '../analysis/analyze-text';
 import { recordBulkSnapshots, getMovers, cleanupOldHistory } from '../api/price-tracker';
 import { parallelFetchPolymarketPrices } from '../api/polymarket-price-poller';
+import { filterMarketsByCategory } from '../data/category-filter';
 
 // v2 key — invalidates the old Polymarket-only cache so combined data is fetched fresh
 const STORAGE_KEY_MARKETS = 'markets_v2';
@@ -268,7 +269,7 @@ async function refreshMarkets() {
 
     // Merge; dedup by id just in case
     const seen = new Set<string>();
-    const markets = [...polyMarkets, ...kalshiMarkets].filter(m => {
+    const allMarkets = [...polyMarkets, ...kalshiMarkets].filter(m => {
       if (seen.has(m.id)) return false;
       seen.add(m.id);
       return true;
@@ -276,7 +277,14 @@ async function refreshMarkets() {
 
     console.log(
       `[Musashi SW] Fetched ${polyMarkets.length} Polymarket + ` +
-      `${kalshiMarkets.length} Kalshi = ${markets.length} total markets`
+      `${kalshiMarkets.length} Kalshi = ${allMarkets.length} total markets`
+    );
+
+    // Filter to only tech-relevant categories (remove sports, entertainment, etc.)
+    const markets = filterMarketsByCategory(allMarkets);
+    console.log(
+      `[Musashi SW] After category filtering: ${markets.length} markets ` +
+      `(removed ${allMarkets.length - markets.length} entertainment/sports/etc)`
     );
 
     if (markets.length > 0) {
