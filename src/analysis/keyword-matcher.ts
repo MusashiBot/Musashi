@@ -6,6 +6,7 @@ import { Market, MarketMatch } from '../types/market';
 import { extractEntities, isEntity, ExtractedEntities } from './entity-extractor';
 import { analyzeContext, isCasualMention } from './context-scorer';
 import { extractMeaningfulPhrases, scorePhraseImportance } from './phrase-detector';
+import { getCategoryPriorityBoost, getEffectiveThreshold } from '../data/category-priority';
 
 // ─── Stop words ──────────────────────────────────────────────────────────────
 
@@ -190,6 +191,26 @@ export const SYNONYM_MAP: Record<string, string[]> = {
   'agi':              ['artificial general intelligence', 'ai'],
   'sam altman':       ['openai', 'ai', 'chatgpt'],
   'altman':           ['openai', 'ai', 'chatgpt'],
+
+  // AI Agents (HIGH PRIORITY - user wants more matches)
+  'agents':           ['ai', 'ai agents', 'autonomous', 'agentic', 'artificial intelligence'],
+  'ai agents':        ['agents', 'autonomous agents', 'ai', 'agentic', 'multi-agent'],
+  'ai agent':         ['agents', 'ai agents', 'autonomous', 'agentic', 'ai'],
+  'autonomous':       ['agents', 'ai agents', 'agentic', 'ai', 'automation'],
+  'autonomous agents':['agents', 'ai agents', 'agentic', 'ai', 'multi-agent'],
+  'agentic':          ['agents', 'ai agents', 'autonomous', 'ai', 'agent framework'],
+  'multi-agent':      ['agents', 'ai agents', 'autonomous', 'agentic', 'ai'],
+  'multi agent':      ['multi-agent', 'agents', 'ai agents', 'agentic'],
+  'agent framework':  ['agents', 'ai agents', 'agentic', 'ai', 'autonomous'],
+  'swarm':            ['multi-agent', 'agents', 'ai agents', 'autonomous', 'ai'],
+  'ai swarm':         ['swarm', 'multi-agent', 'agents', 'ai agents', 'ai'],
+  'reasoning':        ['ai', 'llm', 'artificial intelligence', 'agents'],
+  'planning':         ['ai', 'agents', 'agentic', 'autonomous'],
+  'tool use':         ['ai', 'agents', 'llm', 'function calling'],
+  'function calling': ['ai', 'agents', 'llm', 'tool use'],
+  'langchain':        ['ai', 'agents', 'llm', 'ai framework'],
+  'autogen':          ['ai', 'agents', 'microsoft', 'multi-agent'],
+  'crewai':           ['ai', 'agents', 'multi-agent', 'autonomous'],
   'jensen huang':     ['nvidia', 'nvda', 'gpu', 'ai chips'],
   'huang':            ['nvidia', 'nvda', 'gpu'],
   'nvda':             ['nvidia'],
@@ -1079,7 +1100,10 @@ export class KeywordMatcher {
     for (const market of this.markets) {
       const result = this.scoreMarket(market, rawTokenSet, expandedTokenSet, entities, tweetText);
 
-      if (result.confidence >= this.minConfidence) {
+      // PRIORITY: High-priority categories (AI/crypto/tech) have lower threshold
+      const effectiveThreshold = getEffectiveThreshold(market, this.minConfidence);
+
+      if (result.confidence >= effectiveThreshold) {
         candidateCount++;
 
         // IMPROVED: Filter out casual mentions
@@ -1242,12 +1266,20 @@ export class KeywordMatcher {
     const contextBonus = (contextScore - 0.5) * 0.15; // Ranges from -0.075 to +0.075
     confidence = confidence + contextBonus;
 
+    // PRIORITY BOOST: Tech/AI/Crypto markets get significant boost
+    // User wants these topics matched MORE aggressively
+    const categoryBoost = getCategoryPriorityBoost(market);
+    confidence = confidence + categoryBoost;
+
     // Cap between 0 and 1
     confidence = Math.min(1.0, Math.max(0, confidence));
 
     // Debug logging
     if (confidence >= 0.1) {
-      console.log(`[Matcher] "${tweetText.slice(0, 50)}..." → ${market.title.slice(0, 40)}: ${confidence.toFixed(3)} (context: ${contextScore.toFixed(2)}, bonus: ${contextBonus >= 0 ? '+' : ''}${contextBonus.toFixed(3)})`);
+      const boosts = [];
+      if (contextBonus !== 0) boosts.push(`context: ${contextBonus >= 0 ? '+' : ''}${contextBonus.toFixed(3)}`);
+      if (categoryBoost > 0) boosts.push(`category: +${categoryBoost.toFixed(3)}`);
+      console.log(`[Matcher] "${tweetText.slice(0, 50)}..." → ${market.title.slice(0, 40)}: ${confidence.toFixed(3)} ${boosts.length > 0 ? '(' + boosts.join(', ') + ')' : ''}`);
     }
 
     return { market, confidence, matchedKeywords };
