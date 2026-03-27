@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Musashi",
-  "version": "2.1.0",
-  "description": "AI-powered prediction market intelligence for Twitter/X - Now with improved matching!",
+  "version": "2.2.0",
+  "description": "AI-powered prediction market intelligence - Smart matching for tech, AI, crypto & politics",
   "permissions": [
     "storage",
     "activeTab",
