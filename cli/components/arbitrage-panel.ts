@@ -10,14 +10,14 @@ import { BaseComponent } from './base';
 import { formatPrice, formatSpread } from '../utils';
 
 export class ArbitragePanel extends BaseComponent {
-  constructor(screen: blessed.Widgets.Screen) {
+  constructor(screen: blessed.Widgets.Screen, demoMode: boolean = false) {
     const container = blessed.box({
       top: 4,
-      left: '50%',
-      width: '50%',
-      height: 18,
+      left: demoMode ? 0 : '50%',
+      width: demoMode ? '100%' : '50%',
+      height: demoMode ? 20 : 18,
       border: { type: 'line' },
-      label: ' Arbitrage Opportunities ',
+      label: demoMode ? ' Bitcoin Arbitrage Demo ' : ' Arbitrage Opportunities ',
       tags: true,
       style: {
         border: { fg: 'yellow' },
@@ -33,6 +33,7 @@ export class ArbitragePanel extends BaseComponent {
 
   render(state: AppState) {
     const arbs = this.getUniqueArbitrage(state).slice(0, 2); // Show top 2 unique arbs
+    const demoMode = state.settings.demoMode === 'arb_only';
 
     if (arbs.length === 0) {
       this.box.setContent('{gray-fg}No arbitrage opportunities found...\nMinimum spread: ' + (state.settings.minArbSpread * 100) + '%{/gray-fg}');
@@ -66,6 +67,19 @@ export class ArbitragePanel extends BaseComponent {
 
       lines.push(`{yellow-fg}{bold}Spread: ${totalSpread}{/bold}{/yellow-fg} • ${direction}`);
       lines.push(`{gray-fg}Confidence: ${Math.round(arb.confidence * 100)}%{/gray-fg}`);
+
+      if (demoMode && state.demoPnl) {
+        const pnlColor = state.demoPnl.amountUsd >= 0 ? 'green-fg' : 'red-fg';
+        const pnlSign = state.demoPnl.amountUsd >= 0 ? '+' : '-';
+        lines.push(
+          `{${pnlColor}}Live PnL: ${pnlSign}$${Math.abs(state.demoPnl.amountUsd).toFixed(0)} ` +
+          `(${pnlSign}${state.demoPnl.percent.toFixed(2)}%){/${pnlColor}}`
+        );
+        lines.push(
+          `{gray-fg}Locked Edge: $${state.demoPnl.lockedEdgeUsd.toFixed(0)} on ` +
+          `$${Math.round(state.demoPnl.notionalUsd).toLocaleString('en-US')} notional{/gray-fg}`
+        );
+      }
     });
 
     this.box.setContent(lines.join('\n'));

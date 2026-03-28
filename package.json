@@ -15,6 +15,8 @@
     "agent:test:api:full": "MUSASHI_TEST_INCLUDE_PERF=1 MUSASHI_TEST_INCLUDE_STRESS=1 node --import tsx scripts/test-agent-api.ts",
     "local:api": "node --import tsx scripts/local-api-server.ts",
     "agent:dashboard": "node scripts/agent-dashboard.mjs",
+    "demo:bitcoin": "MUSASHI_TOPIC=bitcoin MUSASHI_CATEGORY=crypto MUSASHI_LAYOUT=arb-only MUSASHI_POLL_MS=3000 MUSASHI_NOTIONAL_USD=10000 node scripts/agent-dashboard.mjs",
+    "agent:demo:bitcoin": "MUSASHI_CLI_TOPIC=bitcoin MUSASHI_CLI_CATEGORY=crypto MUSASHI_CLI_DEMO_MODE=arb_only MUSASHI_CLI_POLL_MS=3000 MUSASHI_CLI_NOTIONAL_USD=10000 MUSASHI_CLI_PNL_GROWTH_PER_SEC=18 node --import tsx cli/index.ts",
     "agent:build": "esbuild cli/index.ts --bundle --platform=node --outfile=dist/agent.js --external:blessed",
     "agent:start": "node dist/agent.js",
     "matcher:eval:build": "tsc --pretty false --target ES2020 --module commonjs --moduleResolution node --esModuleInterop --outDir .tmp/matcher-eval scripts/evaluate-matcher.ts",

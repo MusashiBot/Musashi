@@ -10,12 +10,12 @@ import { BaseComponent } from './base';
 import { getLogColor, getLogIcon } from '../utils';
 
 export class LogsPanel extends BaseComponent {
-  constructor(screen: blessed.Widgets.Screen, visibleLines: number) {
+  constructor(screen: blessed.Widgets.Screen, visibleLines: number, demoMode: boolean = false) {
     const contentLines = Math.max(4, visibleLines);
     const panelHeight = contentLines + 2; // +2 for top/bottom border
 
     const container = blessed.box({
-      top: 30,
+      top: demoMode ? 24 : 30,
       left: 0,
       width: '100%',
       height: panelHeight,

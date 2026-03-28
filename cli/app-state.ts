@@ -56,6 +56,14 @@ export interface AppState {
   // Logs (last 20 entries)
   logs: LogEntry[];
 
+  // Demo display state
+  demoPnl?: {
+    amountUsd: number;
+    percent: number;
+    notionalUsd: number;
+    lockedEdgeUsd: number;
+  };
+
   // Settings
   settings: {
     pollInterval: number;      // ms
@@ -65,5 +73,7 @@ export interface AppState {
     logLines: number;          // logs to show in panel
     category?: string;         // API category filter, e.g. crypto
     topic?: string;            // Local topic filter, e.g. bitcoin
+    demoMode?: 'default' | 'arb_only';
+    notionalUsd?: number;
   };
 }

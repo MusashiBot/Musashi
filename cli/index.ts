@@ -163,6 +163,40 @@ const JESUS_DEMO_MOVERS = [
   },
 ];
 
+const BITCOIN_DEMO_ARBITRAGE = [
+  {
+    polymarket: {
+      id: 'demo-bitcoin-poly-1',
+      platform: 'polymarket',
+      title: 'Will Bitcoin reach $100k by March 2026?',
+      description: 'Fallback based on Musashi API reference Bitcoin market example.',
+      yesPrice: 0.63,
+      noPrice: 0.37,
+      volume24h: 450000,
+      url: 'https://polymarket.com/event/bitcoin-100k',
+      category: 'crypto',
+      lastUpdated: '2026-03-27T12:00:00.000Z',
+    },
+    kalshi: {
+      id: 'demo-bitcoin-kalshi-1',
+      platform: 'kalshi',
+      title: 'Bitcoin $100k by Mar 2026',
+      description: 'Fallback based on Musashi README arbitrage example for video demos.',
+      yesPrice: 0.7,
+      noPrice: 0.3,
+      volume24h: 200000,
+      url: 'https://kalshi.com',
+      category: 'crypto',
+      lastUpdated: '2026-03-27T12:00:00.000Z',
+    },
+    spread: 0.07,
+    profitPotential: 0.07,
+    direction: 'buy_poly_sell_kalshi',
+    confidence: 0.85,
+    matchReason: 'Demo fallback using Musashi Bitcoin arbitrage reference',
+  },
+];
+
 const VALID_CATEGORIES = new Set([
   'politics',
   'economics',
@@ -180,7 +214,11 @@ class MusashiCLI {
   private state: AppState;
   private components: BaseComponent[] = [];
   private pollTimer?: NodeJS.Timeout;
+  private demoPnlTimer?: NodeJS.Timeout;
   private isPolling: boolean = false;
+  private readonly demoMode: 'default' | 'arb_only';
+  private readonly notionalUsd: number;
+  private readonly pnlGrowthPerSecond: number;
 
   constructor() {
     const pollInterval = this.readIntEnv('MUSASHI_CLI_POLL_MS', 10000, 1000);
@@ -190,6 +228,9 @@ class MusashiCLI {
     const minMoverChange = this.readFloatEnv('MUSASHI_CLI_MIN_MOVER_CHANGE', 0.05, 0, 1);
     const category = this.readCategoryEnv('MUSASHI_CLI_CATEGORY');
     const topic = this.readStringEnv('MUSASHI_CLI_TOPIC');
+    this.demoMode = this.readDemoModeEnv('MUSASHI_CLI_DEMO_MODE');
+    this.notionalUsd = this.readIntEnv('MUSASHI_CLI_NOTIONAL_USD', 10000, 100);
+    this.pnlGrowthPerSecond = this.readFloatEnv('MUSASHI_CLI_PNL_GROWTH_PER_SEC', 18, 0, 10000);
 
     // Initialize blessed screen
     this.screen = blessed.screen({
@@ -211,6 +252,12 @@ class MusashiCLI {
       isLoading: false,
       errors: [],
       logs: [],
+      demoPnl: {
+        amountUsd: 0,
+        percent: 0,
+        notionalUsd: this.notionalUsd,
+        lockedEdgeUsd: 0,
+      },
       settings: {
         pollInterval,            // default: 10 seconds
         minArbSpread,
@@ -219,18 +266,26 @@ class MusashiCLI {
         logLines,
         category,
         topic,
+        demoMode: this.demoMode,
+        notionalUsd: this.notionalUsd,
       },
     };
 
     // Create components
-    this.components = [
-      new Header(this.screen),
-      new FeedPanel(this.screen),
-      new ArbitragePanel(this.screen),
-      new MoversPanel(this.screen),
-      new StatsPanel(this.screen),
-      new LogsPanel(this.screen, logLines),
-    ];
+    this.components = this.demoMode === 'arb_only'
+      ? [
+          new Header(this.screen),
+          new ArbitragePanel(this.screen, true),
+          new LogsPanel(this.screen, logLines, true),
+        ]
+      : [
+          new Header(this.screen),
+          new FeedPanel(this.screen),
+          new ArbitragePanel(this.screen),
+          new MoversPanel(this.screen),
+          new StatsPanel(this.screen),
+          new LogsPanel(this.screen, logLines),
+        ];
 
     // Keyboard shortcuts
     this.screen.key(['q', 'C-c'], () => {
@@ -345,6 +400,16 @@ class MusashiCLI {
       const finalFeed = this.applyTopicFallbackToFeed(nextFeed);
       const finalArb = this.applyTopicFallbackToArbitrage(nextArb);
       const finalMovers = this.applyTopicFallbackToMovers(nextMovers);
+      const topArb = finalArb[0];
+      const targetLockedEdgeUsd = topArb ? topArb.spread * this.notionalUsd : 0;
+      const previousLockedEdgeUsd = this.state.demoPnl?.lockedEdgeUsd ?? targetLockedEdgeUsd;
+      const maxJitterUsd = Math.max(8, targetLockedEdgeUsd * 0.025);
+      const jitterUsd = (Math.random() - 0.5) * maxJitterUsd;
+      const dampedLockedEdgeUsd = previousLockedEdgeUsd * 0.7 + (targetLockedEdgeUsd + jitterUsd) * 0.3;
+      const lockedEdgeUsd = Math.max(
+        Math.max(0, targetLockedEdgeUsd - maxJitterUsd),
+        Math.min(dampedLockedEdgeUsd, targetLockedEdgeUsd + maxJitterUsd)
+      );
 
       this.updateState({
         feed: finalFeed,
@@ -354,6 +419,12 @@ class MusashiCLI {
         lastUpdate: new Date().toISOString(),
         isLoading: false,
         errors: endpointErrors,
+        demoPnl: {
+          amountUsd: this.state.demoPnl?.amountUsd ?? 0,
+          percent: ((this.state.demoPnl?.amountUsd ?? 0) / this.notionalUsd) * 100,
+          notionalUsd: this.notionalUsd,
+          lockedEdgeUsd,
+        },
       });
 
       // Log success
@@ -393,6 +464,10 @@ class MusashiCLI {
     if (this.state.settings.topic) {
       this.addLog(`Topic filter: ${this.state.settings.topic}`, 'info');
     }
+    if (this.demoMode === 'arb_only') {
+      this.addLog(`Demo mode: arbitrage only • notional $${this.notionalUsd.toLocaleString('en-US')}`, 'info');
+      this.startDemoPnlAnimation();
+    }
 
     // Initial poll
     this.poll();
@@ -407,6 +482,9 @@ class MusashiCLI {
   stop() {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
+    }
+    if (this.demoPnlTimer) {
+      clearInterval(this.demoPnlTimer);
     }
     this.addLog('Stopped polling', 'info');
   }
@@ -440,6 +518,11 @@ class MusashiCLI {
     const raw = this.readStringEnv(name);
     if (!raw) return undefined;
     return VALID_CATEGORIES.has(raw) ? raw : undefined;
+  }
+
+  private readDemoModeEnv(name: string): 'default' | 'arb_only' {
+    const raw = this.readStringEnv(name)?.toLowerCase();
+    return raw === 'arb_only' ? 'arb_only' : 'default';
   }
 
   private getTopicTerms(): string[] {
@@ -501,14 +584,21 @@ class MusashiCLI {
     return this.state.settings.topic?.trim().toLowerCase() === 'jesus';
   }
 
+  private isBitcoinTopic(): boolean {
+    const topic = this.state.settings.topic?.trim().toLowerCase();
+    return topic === 'bitcoin' || topic === 'btc';
+  }
+
   private applyTopicFallbackToFeed(feed: any[]): any[] {
     if (!this.isJesusTopic() || feed.length > 0) return feed;
     return JESUS_DEMO_FEED;
   }
 
   private applyTopicFallbackToArbitrage(arbitrage: any[]): any[] {
-    if (!this.isJesusTopic() || arbitrage.length > 0) return arbitrage;
-    return JESUS_DEMO_ARBITRAGE;
+    if (arbitrage.length > 0) return arbitrage;
+    if (this.isJesusTopic()) return JESUS_DEMO_ARBITRAGE;
+    if (this.isBitcoinTopic()) return BITCOIN_DEMO_ARBITRAGE;
+    return arbitrage;
   }
 
   private applyTopicFallbackToMovers(movers: any[]): any[] {
@@ -525,6 +615,40 @@ class MusashiCLI {
     });
 
     return this.filterMoversByTopic(movers);
+  }
+
+  private startDemoPnlAnimation() {
+    if (this.demoPnlTimer) {
+      clearInterval(this.demoPnlTimer);
+    }
+    const tick = () => {
+      const current = this.state.demoPnl;
+      if (!current) return;
+      const lockedEdgeUsd = current.lockedEdgeUsd || this.notionalUsd * 0.03;
+      const minDelayMs = 350;
+      const maxDelayMs = 1600;
+      const nextDelayMs = Math.round(minDelayMs + Math.random() * (maxDelayMs - minDelayMs));
+      const secondsElapsed = nextDelayMs / 1000;
+      const baseDriftUsd = Math.max(this.pnlGrowthPerSecond * secondsElapsed, lockedEdgeUsd * 0.004);
+      const randomMultiplier = 0.45 + Math.random() * 1.6;
+      const microJitterUsd = Math.random() * Math.max(6, lockedEdgeUsd * 0.006);
+      const stepUsd = baseDriftUsd * randomMultiplier + microJitterUsd;
+      const maxPnlUsd = Math.max(lockedEdgeUsd * 0.6, this.notionalUsd * 0.025);
+      const nextAmount = Math.max(0, Math.min(current.amountUsd + stepUsd, maxPnlUsd));
+      const nextPercent = (nextAmount / this.notionalUsd) * 100;
+
+      this.updateState({
+        demoPnl: {
+          ...current,
+          amountUsd: nextAmount,
+          percent: nextPercent,
+        },
+      });
+
+      this.demoPnlTimer = setTimeout(tick, nextDelayMs);
+    };
+
+    tick();
   }
 }
 

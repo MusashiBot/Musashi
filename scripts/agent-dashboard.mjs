@@ -7,6 +7,8 @@ const MIN_SPREAD = Number(process.env.MUSASHI_MIN_SPREAD || 0.03);
 const MIN_CHANGE = Number(process.env.MUSASHI_MIN_CHANGE || 0.05);
 const CATEGORY = (process.env.MUSASHI_CATEGORY || '').trim();
 const TOPIC = (process.env.MUSASHI_TOPIC || '').trim().toLowerCase();
+const LAYOUT = (process.env.MUSASHI_LAYOUT || 'full').trim().toLowerCase();
+const NOTIONAL_USD = Number(process.env.MUSASHI_NOTIONAL_USD || 10000);
 
 const ansi = {
   reset: '\x1b[0m',
@@ -23,6 +25,7 @@ const state = {
   ticks: 0,
   errors: 0,
   logs: [],
+  pnlAnchor: null,
 };
 
 const JESUS_DEMO_FEED = [
@@ -105,6 +108,36 @@ const JESUS_DEMO_MOVERS = {
   },
 };
 
+const BITCOIN_DEMO_ARB = {
+  data: {
+    opportunities: [
+      {
+        spread: 0.07,
+        profitPotential: 0.07,
+        confidence: 0.85,
+        matchReason: 'Fallback based on Musashi API reference + README Bitcoin example.',
+        direction: 'buy_poly_sell_kalshi',
+        polymarket: {
+          yesPrice: 0.63,
+          noPrice: 0.37,
+          title: 'Will Bitcoin reach $100k by March 2026?',
+          description: 'Fallback based on live Musashi API example for Bitcoin $100k.',
+          category: 'crypto',
+          volume24h: 450000,
+        },
+        kalshi: {
+          yesPrice: 0.7,
+          noPrice: 0.3,
+          title: 'Bitcoin $100k by Mar 2026',
+          description: 'Fallback based on live Musashi arbitrage example for video demos.',
+          category: 'crypto',
+          volume24h: 200000,
+        },
+      },
+    ],
+  },
+};
+
 function c(text, color) {
   return `${ansi[color] || ''}${text}${ansi.reset}`;
 }
@@ -182,10 +215,38 @@ function pickTopArb(arbJson) {
   const raw = safeArray(arbJson?.data?.opportunities || arbJson?.data);
   const first = raw[0];
   if (!first) return null;
+  const polyYes = typeof first.polymarket?.yesPrice === 'number' ? first.polymarket.yesPrice : null;
+  const kalshiYes = typeof first.kalshi?.yesPrice === 'number' ? first.kalshi.yesPrice : null;
+  const currentSpread = polyYes != null && kalshiYes != null
+    ? Math.abs(polyYes - kalshiYes)
+    : null;
+
+  if (currentSpread != null && state.pnlAnchor == null) {
+    state.pnlAnchor = currentSpread;
+  }
+
+  const anchorSpread = state.pnlAnchor ?? currentSpread ?? 0;
+  const livePnl = currentSpread != null
+    ? (currentSpread - anchorSpread) * NOTIONAL_USD
+    : null;
+  const lockedEdge = currentSpread != null
+    ? currentSpread * NOTIONAL_USD
+    : null;
+
   return {
+    title: first.polymarket?.title || first.kalshi?.title || 'Unknown market',
     spread: typeof first.spread === 'number' ? `${(first.spread * 100).toFixed(1)}%` : 'n/a',
     poly: first.polymarket?.yesPrice != null ? `${Math.round(first.polymarket.yesPrice * 100)}%` : 'n/a',
     kalshi: first.kalshi?.yesPrice != null ? `${Math.round(first.kalshi.yesPrice * 100)}%` : 'n/a',
+    direction: first.direction === 'buy_kalshi_sell_poly' ? 'Buy Kalshi / Sell Poly' : 'Buy Poly / Sell Kalshi',
+    confidence: typeof first.confidence === 'number' ? `${Math.round(first.confidence * 100)}%` : 'n/a',
+    notional: `$${Math.round(NOTIONAL_USD).toLocaleString('en-US')}`,
+    livePnl: livePnl == null
+      ? 'n/a'
+      : `${livePnl >= 0 ? '+' : '-'}$${Math.abs(livePnl).toFixed(0)}`,
+    lockedEdge: lockedEdge == null
+      ? 'n/a'
+      : `$${lockedEdge.toFixed(0)}`,
   };
 }
 
@@ -238,56 +299,94 @@ function box(title, lines, color = 'green') {
 function render({ feedTop, arbTop, moverTop, stats }) {
   const statsTweets = stats?.data?.tweets?.last_24h ?? 'n/a';
   const lastCollection = stats?.data?.last_collection ?? 'n/a';
+  const arbOnly = LAYOUT === 'arb-only';
 
   const lines = [
     `${c('WITH MUSASHI', 'green')} ${c('(live test dashboard)', 'dim')}`,
-    `${c('$ npm run agent', 'blue')}`,
+    `${c(arbOnly ? '$ npm run demo:bitcoin' : '$ npm run agent', 'blue')}`,
     `${c(`Polling every ${Math.round(POLL_MS / 1000)}s`, 'green')} ${c(`| base=${API_BASE_URL}`, 'dim')}`,
     `${c(`Filters: category=${CATEGORY || 'all'} | topic=${TOPIC || 'all'}`, 'green')}`,
-    '',
-    box(
-      'FEED',
-      feedTop.length > 0
-        ? feedTop.flatMap((f) => [
-            `${c('@' + f.user, 'cyan')} ${c('[' + f.urgency + ']', 'yellow')} ${c(f.confidence, 'green')}`,
-            `${f.text}`,
-          ])
-        : [c('No tweets (feed empty or Twitter credits blocked)', 'dim')],
-      'cyan'
-    ),
-    '',
-    box(
-      'ARBITRAGE',
-      arbTop
-        ? [
-            `Spread: ${c(arbTop.spread, 'green')}`,
-            `YES ${c('Poly', 'cyan')} ${arbTop.poly} / ${c('Kalshi', 'yellow')} ${arbTop.kalshi}`,
-          ]
-        : [c('No opportunities above threshold', 'dim')],
-      'yellow'
-    ),
-    '',
-    box(
-      'MOVERS',
-      moverTop
-        ? [moverTop.title, `1h change: ${c(moverTop.change, moverTop.change.startsWith('-') ? 'red' : 'green')}`]
-        : [c('No movers above threshold', 'dim')],
-      'red'
-    ),
-    '',
-    box(
-      'STATS',
-      [
-        `Tweets(24h): ${statsTweets}`,
-        `Last collect: ${String(lastCollection).slice(0, 19)}`,
-        `Ticks: ${state.ticks}`,
-        `Errors: ${state.errors}`,
-      ],
-      'green'
-    ),
-    '',
-    box('LOGS', state.logs.length > 0 ? state.logs : [c('Waiting for first poll...', 'dim')], 'green'),
   ];
+
+  if (arbOnly) {
+    lines.push(
+      '',
+      box(
+        TOPIC ? `ARBITRAGE | ${TOPIC.toUpperCase()}` : 'ARBITRAGE',
+        arbTop
+          ? [
+              `${c(arbTop.title, 'cyan')}`,
+              `Direction: ${c(arbTop.direction, 'yellow')} | Confidence: ${c(arbTop.confidence, 'green')}`,
+              `YES ${c('Poly', 'cyan')} ${arbTop.poly} / ${c('Kalshi', 'yellow')} ${arbTop.kalshi}`,
+              `Spread: ${c(arbTop.spread, 'green')} | Locked edge @ ${arbTop.notional}: ${c(arbTop.lockedEdge, 'green')}`,
+              `Live PnL: ${c(arbTop.livePnl, arbTop.livePnl.startsWith('-') ? 'red' : 'green')}`,
+              `${c('Auto-fallback uses live Musashi Bitcoin reference data when topic results are empty.', 'dim')}`,
+            ]
+          : [c('No opportunities above threshold', 'dim')],
+        'yellow'
+      ),
+      '',
+      box(
+        'STATS',
+        [
+          `Tweets(24h): ${statsTweets}`,
+          `Last collect: ${String(lastCollection).slice(0, 19)}`,
+          `Ticks: ${state.ticks}`,
+          `Errors: ${state.errors}`,
+        ],
+        'green'
+      ),
+      '',
+      box('LOGS', state.logs.length > 0 ? state.logs : [c('Waiting for first poll...', 'dim')], 'green')
+    );
+  } else {
+    lines.push(
+      '',
+      box(
+        'FEED',
+        feedTop.length > 0
+          ? feedTop.flatMap((f) => [
+              `${c('@' + f.user, 'cyan')} ${c('[' + f.urgency + ']', 'yellow')} ${c(f.confidence, 'green')}`,
+              `${f.text}`,
+            ])
+          : [c('No tweets (feed empty or Twitter credits blocked)', 'dim')],
+        'cyan'
+      ),
+      '',
+      box(
+        'ARBITRAGE',
+        arbTop
+          ? [
+              `Spread: ${c(arbTop.spread, 'green')}`,
+              `YES ${c('Poly', 'cyan')} ${arbTop.poly} / ${c('Kalshi', 'yellow')} ${arbTop.kalshi}`,
+              `Live PnL @ ${arbTop.notional}: ${c(arbTop.livePnl, arbTop.livePnl.startsWith('-') ? 'red' : 'green')}`,
+            ]
+          : [c('No opportunities above threshold', 'dim')],
+        'yellow'
+      ),
+      '',
+      box(
+        'MOVERS',
+        moverTop
+          ? [moverTop.title, `1h change: ${c(moverTop.change, moverTop.change.startsWith('-') ? 'red' : 'green')}`]
+          : [c('No movers above threshold', 'dim')],
+        'red'
+      ),
+      '',
+      box(
+        'STATS',
+        [
+          `Tweets(24h): ${statsTweets}`,
+          `Last collect: ${String(lastCollection).slice(0, 19)}`,
+          `Ticks: ${state.ticks}`,
+          `Errors: ${state.errors}`,
+        ],
+        'green'
+      ),
+      '',
+      box('LOGS', state.logs.length > 0 ? state.logs : [c('Waiting for first poll...', 'dim')], 'green')
+    );
+  }
 
   process.stdout.write('\x1bc');
   process.stdout.write(lines.join('\n') + '\n');
@@ -313,6 +412,10 @@ async function fetchMoversForDemo(categoryQuery) {
 
 function isJesusTopic() {
   return TOPIC === 'jesus';
+}
+
+function isBitcoinTopic() {
+  return TOPIC === 'bitcoin' || TOPIC === 'btc';
 }
 
 async function pollOnce() {
@@ -369,9 +472,12 @@ async function pollOnce() {
   const finalFeedJson = isJesusTopic() && (!feedJson || safeArray(feedJson?.data?.tweets).length === 0)
     ? { data: { tweets: JESUS_DEMO_FEED } }
     : feedJson;
-  const finalArbJson = isJesusTopic() && (!arbJson || safeArray(arbJson?.data?.opportunities || arbJson?.data).length === 0)
-    ? JESUS_DEMO_ARB
-    : arbJson;
+  let finalArbJson = arbJson;
+  if (isJesusTopic() && (!arbJson || safeArray(arbJson?.data?.opportunities || arbJson?.data).length === 0)) {
+    finalArbJson = JESUS_DEMO_ARB;
+  } else if (isBitcoinTopic() && (!arbJson || safeArray(arbJson?.data?.opportunities || arbJson?.data).length === 0)) {
+    finalArbJson = BITCOIN_DEMO_ARB;
+  }
   const finalMoversJson = isJesusTopic() && (!moversJson || safeArray(moversJson?.data?.movers).length === 0)
     ? JESUS_DEMO_MOVERS
     : moversJson;
