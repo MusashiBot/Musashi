@@ -35,9 +35,37 @@ const POLYMARKET_MAX_PAGES = parsePositiveInt(process.env.MUSASHI_POLYMARKET_MAX
 const KALSHI_TARGET_COUNT = parsePositiveInt(process.env.MUSASHI_KALSHI_TARGET_COUNT, 1000);
 const KALSHI_MAX_PAGES = parsePositiveInt(process.env.MUSASHI_KALSHI_MAX_PAGES, 20);
 
+// Stage 0 Session 2: Per-source timeout (5 seconds)
+const SOURCE_TIMEOUT_MS = 5000;
+
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Stage 0 Session 2: Wrap a promise with a timeout
+ * If the promise doesn't resolve within timeoutMs, reject with timeout error
+ *
+ * @param promise - The promise to wrap
+ * @param timeoutMs - Timeout in milliseconds
+ * @param sourceName - Name of the source (for error message)
+ * @returns Promise that rejects if timeout is exceeded
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  sourceName: string
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${sourceName} request timeout after ${timeoutMs}ms`)),
+        timeoutMs
+      )
+    ),
+  ]);
 }
 
 /**
@@ -58,9 +86,18 @@ export async function getMarkets(): Promise<Market[]> {
   console.log(`[Market Cache] Fetching fresh markets... (TTL: ${CACHE_TTL_MS}ms)`);
 
   try {
+    // Stage 0 Session 2: Wrap each source with 5-second timeout
     const [polyResult, kalshiResult] = await Promise.allSettled([
-      fetchPolymarkets(POLYMARKET_TARGET_COUNT, POLYMARKET_MAX_PAGES),
-      fetchKalshiMarkets(KALSHI_TARGET_COUNT, KALSHI_MAX_PAGES),
+      withTimeout(
+        fetchPolymarkets(POLYMARKET_TARGET_COUNT, POLYMARKET_MAX_PAGES),
+        SOURCE_TIMEOUT_MS,
+        'Polymarket'
+      ),
+      withTimeout(
+        fetchKalshiMarkets(KALSHI_TARGET_COUNT, KALSHI_MAX_PAGES),
+        SOURCE_TIMEOUT_MS,
+        'Kalshi'
+      ),
     ]);
 
     // Stage 0: Track Polymarket fetch
