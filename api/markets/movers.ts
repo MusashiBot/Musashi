@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Market } from '../../src/types/market';
-import { getMarkets } from '../lib/market-cache';
+import { getMarkets, getMarketMetadata } from '../lib/market-cache';
 import { kv, listKvKeys, setKvWithTtl } from '../lib/vercel-kv';
 
 /**
@@ -268,6 +268,9 @@ export default async function handler(
     // Get tracked market count for metadata (lightweight, no N+1 query)
     const trackedMarkets = await getTrackedMarketCount();
 
+    // Stage 0: Get freshness metadata
+    const freshnessMetadata = getMarketMetadata();
+
     // Build response
     const response = {
       success: true,
@@ -286,6 +289,10 @@ export default async function handler(
           markets_tracked: trackedMarkets,
           storage: 'Vercel KV (Redis)',
           history_retention: '7 days',
+          // Stage 0: Freshness metadata
+          data_age_seconds: freshnessMetadata.data_age_seconds,
+          fetched_at: freshnessMetadata.fetched_at,
+          sources: freshnessMetadata.sources,
         },
       },
     };

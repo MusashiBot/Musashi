@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { KeywordMatcher } from '../src/analysis/keyword-matcher';
 import { generateSignal, TradingSignal } from '../src/analysis/signal-generator';
-import { getMarkets, getArbitrage } from './lib/market-cache';
+import { getMarkets, getArbitrage, getMarketMetadata } from './lib/market-cache';
 
 function isMalformedJsonError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -159,6 +159,9 @@ export default async function handler(
     // Generate trading signal
     const signal: TradingSignal = generateSignal(text, matches, arbitrageForSignal);
 
+    // Stage 0: Get freshness metadata
+    const freshnessMetadata = getMarketMetadata();
+
     // Build response
     const response = {
       event_id: signal.event_id,
@@ -177,6 +180,10 @@ export default async function handler(
           sources_checked: 2, // Polymarket + Kalshi
           markets_analyzed: markets.length,
           model_version: 'v2.0.0',
+          // Stage 0: Freshness metadata
+          data_age_seconds: freshnessMetadata.data_age_seconds,
+          fetched_at: freshnessMetadata.fetched_at,
+          sources: freshnessMetadata.sources,
         },
       },
     };

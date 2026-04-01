@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMarkets, getArbitrage } from '../lib/market-cache';
+import { getMarkets, getArbitrage, getMarketMetadata } from '../lib/market-cache';
 
 export default async function handler(
   req: VercelRequest,
@@ -87,6 +87,9 @@ export default async function handler(
       .filter(arb => !category || arb.polymarket.category === category || arb.kalshi.category === category)
       .slice(0, limitNum);
 
+    // Stage 0: Get freshness metadata
+    const freshnessMetadata = getMarketMetadata();
+
     // Build response
     const response = {
       success: true,
@@ -105,6 +108,10 @@ export default async function handler(
           markets_analyzed: markets.length,
           polymarket_count: markets.filter(m => m.platform === 'polymarket').length,
           kalshi_count: markets.filter(m => m.platform === 'kalshi').length,
+          // Stage 0: Freshness metadata
+          data_age_seconds: freshnessMetadata.data_age_seconds,
+          fetched_at: freshnessMetadata.fetched_at,
+          sources: freshnessMetadata.sources,
         },
       },
     };

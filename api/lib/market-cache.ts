@@ -1,18 +1,28 @@
 /**
  * Shared market cache for Vercel API endpoints
  * Prevents duplicate market fetching across endpoints
+ * Stage 0: Added per-source tracking and freshness metadata
  */
 
 import { Market, ArbitrageOpportunity } from '../../src/types/market';
 import { fetchPolymarkets } from '../../src/api/polymarket-client';
 import { fetchKalshiMarkets } from '../../src/api/kalshi-client';
 import { detectArbitrage } from '../../src/api/arbitrage-detector';
+import { FreshnessMetadata, SourceStatus } from './types';
 
 // In-memory cache for markets
 // Default: 20 seconds (configurable via MARKET_CACHE_TTL_SECONDS env var)
 let cachedMarkets: Market[] = [];
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = (parseInt(process.env.MARKET_CACHE_TTL_SECONDS || '20', 10)) * 1000;
+
+// Stage 0: Per-source tracking for freshness metadata
+let polyTimestamp = 0;
+let kalshiTimestamp = 0;
+let polyMarketCount = 0;
+let kalshiMarketCount = 0;
+let polyError: string | null = null;
+let kalshiError: string | null = null;
 
 // In-memory cache for arbitrage opportunities
 // Default: 15 seconds (configurable via ARBITRAGE_CACHE_TTL_SECONDS env var)
@@ -33,6 +43,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 /**
  * Fetch and cache markets from both platforms
  * Shared across all API endpoints to avoid duplicate fetches
+ * Stage 0: Tracks per-source timestamps and errors for freshness metadata
  */
 export async function getMarkets(): Promise<Market[]> {
   const now = Date.now();
@@ -52,6 +63,26 @@ export async function getMarkets(): Promise<Market[]> {
       fetchKalshiMarkets(KALSHI_TARGET_COUNT, KALSHI_MAX_PAGES),
     ]);
 
+    // Stage 0: Track Polymarket fetch
+    if (polyResult.status === 'fulfilled') {
+      polyTimestamp = now;
+      polyMarketCount = polyResult.value.length;
+      polyError = null;
+    } else {
+      polyError = polyResult.reason?.message || 'Failed to fetch Polymarket markets';
+      console.error('[Market Cache] Polymarket fetch failed:', polyError);
+    }
+
+    // Stage 0: Track Kalshi fetch
+    if (kalshiResult.status === 'fulfilled') {
+      kalshiTimestamp = now;
+      kalshiMarketCount = kalshiResult.value.length;
+      kalshiError = null;
+    } else {
+      kalshiError = kalshiResult.reason?.message || 'Failed to fetch Kalshi markets';
+      console.error('[Market Cache] Kalshi fetch failed:', kalshiError);
+    }
+
     const polyMarkets = polyResult.status === 'fulfilled' ? polyResult.value : [];
     const kalshiMarkets = kalshiResult.status === 'fulfilled' ? kalshiResult.value : [];
 
@@ -65,6 +96,50 @@ export async function getMarkets(): Promise<Market[]> {
     // Return stale cache if available
     return cachedMarkets;
   }
+}
+
+/**
+ * Stage 0: Get freshness metadata for current cached data
+ * Tells bots/agents how old the data is and which sources are healthy
+ *
+ * @returns FreshnessMetadata with data age and source health status
+ */
+export function getMarketMetadata(): FreshnessMetadata {
+  const now = Date.now();
+
+  // Find oldest fetch timestamp (or use cache timestamp if no individual source timestamps)
+  const oldestTimestamp = Math.min(
+    polyTimestamp || cacheTimestamp,
+    kalshiTimestamp || cacheTimestamp
+  );
+
+  // Calculate data age in seconds
+  const dataAgeMs = now - oldestTimestamp;
+  const dataAgeSeconds = Math.floor(dataAgeMs / 1000);
+
+  // Build source status
+  const polymarketStatus: SourceStatus = {
+    available: polyError === null && polyMarketCount > 0,
+    last_successful_fetch: polyTimestamp > 0 ? new Date(polyTimestamp).toISOString() : null,
+    error: polyError || undefined,
+    market_count: polyMarketCount,
+  };
+
+  const kalshiStatus: SourceStatus = {
+    available: kalshiError === null && kalshiMarketCount > 0,
+    last_successful_fetch: kalshiTimestamp > 0 ? new Date(kalshiTimestamp).toISOString() : null,
+    error: kalshiError || undefined,
+    market_count: kalshiMarketCount,
+  };
+
+  return {
+    data_age_seconds: dataAgeSeconds,
+    fetched_at: new Date(oldestTimestamp).toISOString(),
+    sources: {
+      polymarket: polymarketStatus,
+      kalshi: kalshiStatus,
+    },
+  };
 }
 
 /**
