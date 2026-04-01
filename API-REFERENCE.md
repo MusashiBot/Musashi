@@ -65,7 +65,22 @@ Content-Type: application/json
       "processing_time_ms": 124,
       "sources_checked": 2,
       "markets_analyzed": 1234,
-      "model_version": "v2.0.0"
+      "model_version": "v2.0.0",
+      // Stage 0: Freshness tracking (added March 2026)
+      "data_age_seconds": 18,              // How old the cached data is
+      "fetched_at": "2026-03-01T11:59:42.000Z",  // When data was fetched
+      "sources": {
+        "polymarket": {
+          "available": true,
+          "last_successful_fetch": "2026-03-01T11:59:42.000Z",
+          "market_count": 1200
+        },
+        "kalshi": {
+          "available": true,
+          "last_successful_fetch": "2026-03-01T11:59:42.000Z",
+          "market_count": 500
+        }
+      }
     }
   }
 }
@@ -140,7 +155,22 @@ GET /api/markets/arbitrage?minSpread=0.03&minConfidence=0.5&limit=20&category=cr
       "processing_time_ms": 89,
       "markets_analyzed": 1234,
       "polymarket_count": 734,
-      "kalshi_count": 500
+      "kalshi_count": 500,
+      // Stage 0: Freshness tracking (added March 2026)
+      "data_age_seconds": 18,
+      "fetched_at": "2026-03-01T11:59:42.000Z",
+      "sources": {
+        "polymarket": {
+          "available": true,
+          "last_successful_fetch": "2026-03-01T11:59:42.000Z",
+          "market_count": 1200
+        },
+        "kalshi": {
+          "available": true,
+          "last_successful_fetch": "2026-03-01T11:59:42.000Z",
+          "market_count": 500
+        }
+      }
     }
   }
 }
@@ -198,9 +228,24 @@ GET /api/markets/movers?minChange=0.05&limit=20&category=us_politics
     "metadata": {
       "processing_time_ms": 45,
       "markets_analyzed": 1234,
-      "price_snapshots_stored": 4567,
+      "markets_tracked": 1200,
       "storage": "Vercel KV (Redis)",
-      "history_retention": "7 days"
+      "history_retention": "7 days",
+      // Stage 0: Freshness tracking (added March 2026)
+      "data_age_seconds": 18,
+      "fetched_at": "2026-03-01T11:59:42.000Z",
+      "sources": {
+        "polymarket": {
+          "available": true,
+          "last_successful_fetch": "2026-03-01T11:59:42.000Z",
+          "market_count": 1200
+        },
+        "kalshi": {
+          "available": true,
+          "last_successful_fetch": "2026-03-01T11:59:42.000Z",
+          "market_count": 500
+        }
+      }
     }
   }
 }
@@ -265,6 +310,108 @@ GET /api/health
     "rate_limit": "none (currently)"
   }
 }
+```
+
+---
+
+## Data Freshness & Graceful Degradation
+
+**Stage 0 Improvements (March 2026)**: All API endpoints now include freshness metadata and handle partial source failures gracefully.
+
+### Freshness Metadata
+
+Every response includes these fields in `metadata`:
+
+```json
+{
+  "data_age_seconds": 18,              // How many seconds old the cached data is
+  "fetched_at": "2026-03-01T11:59:42Z", // ISO timestamp when data was fetched
+  "sources": {
+    "polymarket": {
+      "available": true,                // Is this source healthy?
+      "last_successful_fetch": "2026-03-01T11:59:42Z",
+      "market_count": 1200              // Markets from this source
+    },
+    "kalshi": {
+      "available": true,
+      "last_successful_fetch": "2026-03-01T11:59:42Z",
+      "market_count": 500
+    }
+  }
+}
+```
+
+**What this means for your bot:**
+- Check `data_age_seconds` to know how stale the data is (typically 0-20 seconds)
+- If `data_age_seconds > 30`, data may be stale due to high load
+- Use `sources.*.available` to know which platforms are currently healthy
+- If one source is unavailable, you still get data from the other source
+
+### Graceful Degradation
+
+**The API never fails completely.** If one data source is down, you still get data from the other:
+
+**Example: Kalshi rate-limited**
+```json
+{
+  "success": true,  // ← Still returns success!
+  "data": {
+    "markets": [...],  // ← Only Polymarket markets
+    "metadata": {
+      "markets_analyzed": 1200,  // ← Reduced count
+      "sources": {
+        "polymarket": {
+          "available": true,
+          "market_count": 1200
+        },
+        "kalshi": {
+          "available": false,  // ← Source down
+          "last_successful_fetch": null,
+          "error": "Kalshi API responded with 429",  // ← Error details
+          "market_count": 0
+        }
+      }
+    }
+  }
+}
+```
+
+**Benefits:**
+- **HTTP 200 (not 500)**: Your bot won't crash on partial failures
+- **Partial data**: Better to have some data than no data
+- **Error transparency**: You know exactly which source failed and why
+- **Auto-recovery**: When the source comes back, it's automatically included
+
+**Timeout behavior:**
+- Each source has a **5-second timeout**
+- If Polymarket hangs, Kalshi data comes through in 5s
+- If Kalshi hangs, Polymarket data comes through in 5s
+- Total request time never exceeds ~5 seconds per source
+
+### Cache Strategy
+
+**Default TTLs:**
+- Markets: **20 seconds** (shared across endpoints)
+- Arbitrage: **15 seconds** (highly volatile)
+- Movers: Price snapshots stored in Redis for **7 days**
+
+**For bot developers:**
+
+```python
+# Check data freshness
+response = requests.post('https://musashi-api.vercel.app/api/analyze-text', json={'text': '...'})
+metadata = response.json()['data']['metadata']
+
+if metadata['data_age_seconds'] > 30:
+    print("Warning: Data may be stale")
+
+# Check source health
+if not metadata['sources']['polymarket']['available']:
+    print("Polymarket is down:", metadata['sources']['polymarket'].get('error'))
+
+# Still trade on available data
+if metadata['sources']['kalshi']['available']:
+    print(f"Trading on {metadata['sources']['kalshi']['market_count']} Kalshi markets")
 ```
 
 ---
@@ -362,11 +509,13 @@ All endpoints return errors in this format:
 ```
 
 **Common HTTP Status Codes:**
-- `200`: Success
+- `200`: Success (includes partial success with one source down)
 - `400`: Bad request (invalid parameters)
 - `405`: Method not allowed
-- `500`: Internal server error
-- `503`: Service unavailable
+- `500`: Internal server error (only if both sources fail catastrophically)
+- `503`: Service unavailable (only if no cached data available)
+
+**Stage 0 Note**: With graceful degradation, you'll almost always get HTTP 200. Check `sources.*.available` in metadata to see which platforms are healthy. Even if one source is down, you still get data from the other with `success: true`.
 
 ---
 
@@ -386,11 +535,22 @@ Supported market categories:
 
 ## Caching & Storage
 
-- **Markets**: Cached for **20 seconds** in-memory (shared across endpoints, configurable via `MARKET_CACHE_TTL_SECONDS`)
-- **Arbitrage**: Cached for **15 seconds** (configurable via `ARBITRAGE_CACHE_TTL_SECONDS`)
+**Cache TTLs (Stage 0 optimized for trading):**
+- **Markets**: **20 seconds** in-memory (shared across endpoints)
+- **Arbitrage**: **15 seconds** (highly volatile, needs fresh data)
 - **Movers**: Price snapshots stored in **Vercel KV (Redis)** for **7 days**
 
-> **Trading Update**: Cache TTLs reduced from 5 minutes to 15-20 seconds for fresher pricing data. See environment variables section for configuration options.
+> **Stage 0 Update (March 2026)**: All responses now include `data_age_seconds` and per-source freshness metadata. Cache TTLs were reduced from 5 minutes to 15-20 seconds for trading-grade freshness.
+
+**How freshness tracking works:**
+1. When markets are fetched from Polymarket/Kalshi, timestamp is recorded
+2. `data_age_seconds` = current time - oldest fetch timestamp
+3. Cache hits return data with original `fetched_at` timestamp
+4. Bots can check freshness and decide whether to wait for cache expiry
+
+**Configurable via environment variables:**
+- `MARKET_CACHE_TTL_SECONDS` (default: **20**)
+- `ARBITRAGE_CACHE_TTL_SECONDS` (default: **15**)
 
 ### Vercel KV Setup
 
