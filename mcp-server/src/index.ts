@@ -130,6 +130,38 @@ class MusashiMCPServer {
           },
         },
         {
+          name: 'ground_probability',
+          description: 'THE KEY PRIMITIVE - Ground LLM probability estimates in live market prices. Takes a probability claim (e.g., "70% chance Fed cuts rates") and optional LLM estimate, returns actual market consensus and divergence analysis. This is what makes Musashi different.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              claim: {
+                type: 'string',
+                description: 'Natural language probability claim (e.g., "There\'s a 70% chance the Fed cuts in May")',
+              },
+              llm_estimate: {
+                type: 'number',
+                description: 'Optional: Your/LLM\'s probability estimate (0-1). Used to calculate divergence.',
+                minimum: 0,
+                maximum: 1,
+              },
+              min_confidence: {
+                type: 'number',
+                description: 'Minimum market match confidence (0-1). Default: 0.3',
+                minimum: 0,
+                maximum: 1,
+              },
+              max_markets: {
+                type: 'number',
+                description: 'Maximum number of markets to consider. Default: 5',
+                minimum: 1,
+                maximum: 20,
+              },
+            },
+            required: ['claim'],
+          },
+        },
+        {
           name: 'get_feed',
           description: 'Real-time Twitter feed of analyzed tweets from prediction market traders and analysts. Each tweet is matched to relevant markets.',
           inputSchema: {
@@ -206,6 +238,9 @@ class MusashiMCPServer {
 
           case 'get_movers':
             return await this.handleGetMovers(args);
+
+          case 'ground_probability':
+            return await this.handleGroundProbability(args);
 
           case 'get_feed':
             return await this.handleGetFeed(args);
@@ -367,6 +402,67 @@ class MusashiMCPServer {
       result += `   Platform: ${mover.market.platform}\n`;
       result += `   Volume: $${mover.market.volume24h.toLocaleString()}\n\n`;
     });
+
+    return {
+      content: [{ type: 'text', text: result }],
+    };
+  }
+
+  private async handleGroundProbability(args: any) {
+    const { claim, llm_estimate, min_confidence = 0.3, max_markets = 5 } = args;
+
+    const response = await fetch(`${API_BASE_URL}/api/ground-probability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claim, llm_estimate, min_confidence, max_markets }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to ground probability');
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error('Invalid API response');
+    }
+
+    let result = `**Ground Probability Analysis**\n\n`;
+    result += `Claim: "${data.claim}"\n\n`;
+
+    // Market consensus
+    if (data.market_consensus.price !== null) {
+      result += `**Market Consensus:** ${(data.market_consensus.price * 100).toFixed(1)}%\n`;
+      result += `Confidence: ${(data.market_consensus.confidence * 100).toFixed(1)}%\n`;
+      result += `Markets analyzed: ${data.market_consensus.market_count}\n\n`;
+    } else {
+      result += `**Market Consensus:** No relevant markets found\n\n`;
+    }
+
+    // LLM estimate comparison
+    if (data.llm_estimate !== null && data.divergence) {
+      result += `**Your Estimate:** ${(data.llm_estimate * 100).toFixed(1)}%\n\n`;
+      result += `**Divergence Analysis:**\n`;
+      result += `Type: ${data.divergence.type}\n`;
+      result += `Magnitude: ${data.divergence.magnitude_percent.toFixed(1)} percentage points\n\n`;
+      result += `**Insight:** ${data.divergence.insight}\n\n`;
+    }
+
+    // Top matching markets
+    if (data.market_consensus.markets.length > 0) {
+      result += `**Supporting Markets:**\n`;
+      data.market_consensus.markets.forEach((market: any, i: number) => {
+        result += `${i + 1}. **${market.title}** (${market.platform})\n`;
+        result += `   Price: ${(market.yes_price * 100).toFixed(1)}%\n`;
+        result += `   Volume: $${market.volume_24h.toLocaleString()}\n`;
+        result += `   Match: ${(market.match_confidence * 100).toFixed(1)}%\n`;
+        result += `   ${market.url}\n\n`;
+      });
+    }
+
+    result += `---\n`;
+    result += `Data age: ${data.metadata.data_age_seconds}s | Processing: ${data.metadata.processing_time_ms}ms`;
 
     return {
       content: [{ type: 'text', text: result }],
