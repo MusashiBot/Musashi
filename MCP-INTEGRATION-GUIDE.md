@@ -4,15 +4,19 @@ Connect Musashi's prediction market intelligence to Claude on the web or Claude 
 
 ## Quick Start (Remote - claude.ai website)
 
-**Coming Soon:** Remote MCP server deployment
+**✅ NOW LIVE:** Remote MCP server deployed on Railway
 
-Once deployed, you'll be able to:
+Connect to Musashi from claude.ai:
 
 1. Go to https://claude.ai/settings/integrations
 2. Click "Add MCP Server"
-3. Enter URL: `https://musashi-mcp.yoursite.com`
+3. Enter URL: `https://musashi-production.up.railway.app`
 4. Enter API key: Contact us for access
 5. Click "Connect"
+
+**Production URL:** `https://musashi-production.up.railway.app`
+
+**For API key access:** Contact the Musashi team or deploy your own instance using the deployment guide in `mcp-server/RAILWAY_DEPLOYMENT.md`
 
 ## Quick Start (Local - Claude Desktop)
 

@@ -5,16 +5,20 @@
 Musashi is a complete prediction market intelligence platform with:
 - 🎯 **Chrome Extension** - Overlay market odds on Twitter/X in real-time
 - 🤖 **Agent SDK** - Build automated trading bots in TypeScript/JavaScript
-- 🔌 **REST API** - Analyze text, detect arbitrage, track market movers
+- 🔌 **MCP Server** - Connect prediction market intelligence directly to Claude AI (claude.ai & Claude Desktop)
+- 📡 **REST API** - Analyze text, detect arbitrage, track market movers
 - ⚡ **Live Data** - Real Polymarket + Kalshi integration with 5-min refresh
 
 ---
 
 ## Quick Links
 
+- **[MCP Integration Guide](./MCP-INTEGRATION-GUIDE.md)** - Connect to Claude AI (LIVE NOW)
 - **[Agent SDK Documentation](./README-AGENT.md)** - Build trading bots
 - **[REST API Reference](./API-REFERENCE.md)** - API endpoints and examples
 - **[Changelog](./CHANGELOG.md)** - Version history and updates
+
+**🚀 NEW:** MCP Server now live at `https://musashi-production.up.railway.app` - Connect prediction market intelligence directly to Claude!
 
 ---
 
