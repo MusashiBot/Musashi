@@ -12,8 +12,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { SessionManager } from './server/session-manager.js';
-import { HttpServer } from './server/http-server.js';
+import { StreamableHttpServer } from './server/streamable-http-server.js';
 
 // REST API base URL
 const API_BASE_URL = process.env.MUSASHI_API_BASE_URL || 'https://musashi-api.vercel.app';
@@ -23,8 +22,7 @@ const API_BASE_URL = process.env.MUSASHI_API_BASE_URL || 'https://musashi-api.ve
  */
 class MusashiMCPServer {
   private server: Server;
-  private httpServer: HttpServer | null = null;
-  private sessionManager: SessionManager | null = null;
+  private streamableHttpServer: StreamableHttpServer | null = null;
 
   constructor() {
     this.server = new Server(
@@ -607,12 +605,8 @@ class MusashiMCPServer {
   }
 
   private async cleanup(): Promise<void> {
-    if (this.httpServer) {
-      await this.httpServer.stop();
-    }
-
-    if (this.sessionManager) {
-      this.sessionManager.destroy();
+    if (this.streamableHttpServer) {
+      await this.streamableHttpServer.stop();
     }
   }
 
@@ -627,67 +621,92 @@ class MusashiMCPServer {
   }
 
   /**
-   * Start server with HTTP+SSE transport (remote mode)
+   * Start server with Streamable HTTP transport (remote mode)
    */
   async startHttp(port: number): Promise<void> {
-    console.log('[MCP] Starting server in HTTP mode (remote)');
+    console.log('[MCP] Starting server in Streamable HTTP mode (remote)');
 
-    // Validate API keys configured
-    if (!process.env.MCP_API_KEYS) {
-      throw new Error('MCP_API_KEYS environment variable required for HTTP transport');
-    }
-
-    this.sessionManager = new SessionManager();
-
-    this.httpServer = new HttpServer({
+    this.streamableHttpServer = new StreamableHttpServer({
       port,
-      sessionManager: this.sessionManager,
-      onMessage: (sessionId, message) => {
-        // Route message to MCP server and send response via SSE
-        this.handleHttpMessage(sessionId, message);
+      onRequest: async (_sessionId: string | null, request: any) => {
+        // Handle JSON-RPC requests
+        return await this.handleJsonRpcRequest(request);
+      },
+      onNotification: async (_sessionId: string | null, notification: any) => {
+        // Handle JSON-RPC notifications
+        await this.handleJsonRpcNotification(notification);
+      },
+      onResponse: async (_sessionId: string | null, response: any) => {
+        // Handle JSON-RPC responses (from client to server)
+        console.log('[MCP] Received response from client:', response);
       },
     });
 
-    await this.httpServer.start(port);
-    console.log('[MCP] Server ready (HTTP+SSE transport)');
+    await this.streamableHttpServer.start(port);
+    console.log('[MCP] Server ready (Streamable HTTP transport)');
   }
 
-  private async handleHttpMessage(sessionId: string, message: any): Promise<void> {
-    try {
-      // Process message through MCP server
-      // This is a simplified version - full implementation would need proper JSON-RPC handling
-      const { method, params, id } = message;
+  private async handleJsonRpcRequest(request: any): Promise<any> {
+    const { method, params, id } = request;
 
-      let result;
+    console.log(`[MCP] Handling request: ${method}`);
 
-      if (method === 'tools/list') {
-        result = await this.server.request({ method: 'tools/list' }, ListToolsRequestSchema);
-      } else if (method === 'tools/call') {
-        result = await this.server.request({ method: 'tools/call', params }, CallToolRequestSchema);
-      } else {
-        throw new Error(`Unknown method: ${method}`);
-      }
+    // Route to appropriate handler based on method
+    if (method === 'initialize') {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: {},
+          },
+          serverInfo: {
+            name: 'musashi',
+            version: '1.0.0',
+          },
+        },
+      };
+    }
 
-      // Send response via SSE
-      const response = {
+    if (method === 'tools/list') {
+      const tools = await this.server.request({ method: 'tools/list' }, ListToolsRequestSchema);
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: tools,
+      };
+    }
+
+    if (method === 'tools/call') {
+      const result = await this.server.request({ method: 'tools/call', params }, CallToolRequestSchema);
+      return {
         jsonrpc: '2.0',
         id,
         result,
       };
+    }
 
-      this.sessionManager?.sendSSEMessage(sessionId, response);
-    } catch (error: any) {
-      // Send error via SSE
-      const errorResponse = {
-        jsonrpc: '2.0',
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
+    // Unknown method
+    return {
+      jsonrpc: '2.0',
+      id,
+      error: {
+        code: -32601,
+        message: `Method not found: ${method}`,
+      },
+    };
+  }
 
-      this.sessionManager?.sendSSEMessage(sessionId, errorResponse);
+  private async handleJsonRpcNotification(notification: any): Promise<void> {
+    const { method } = notification;
+    console.log(`[MCP] Handling notification: ${method}`);
+
+    // Handle notifications like 'initialized', 'cancelled', etc.
+    if (method === 'notifications/initialized') {
+      console.log('[MCP] Client initialized');
+    } else if (method === 'notifications/cancelled') {
+      console.log('[MCP] Request cancelled');
     }
   }
 }
