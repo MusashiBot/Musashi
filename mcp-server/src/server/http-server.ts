@@ -5,9 +5,9 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { SessionManager } from './session-manager';
-import { sessionRateLimiter, messageRateLimiter, hourlyRateLimiter, sseLimiter } from './rate-limiter';
-import { verifyApiKey, extractApiKey, getTruncatedKey } from '../transports/auth';
+import { SessionManager } from './session-manager.js';
+import { sessionRateLimiter, messageRateLimiter, hourlyRateLimiter, sseLimiter } from './rate-limiter.js';
+import { verifyApiKey, extractApiKey } from '../transports/auth.js';
 
 export interface HttpServerOptions {
   port: number;
@@ -61,7 +61,7 @@ export class HttpServer {
     this.app.use(express.json());
 
     // Request logging
-    this.app.use((req: Request, res: Response, next: NextFunction) => {
+    this.app.use((req: Request, _res: Response, next: NextFunction) => {
       console.log(`[HTTP] ${req.method} ${req.path} - ${req.ip}`);
       next();
     });
@@ -72,7 +72,7 @@ export class HttpServer {
 
   private setupRoutes(): void {
     // Health check endpoint (public, no auth)
-    this.app.get('/health', (req: Request, res: Response) => {
+    this.app.get('/health', (_req: Request, res: Response) => {
       res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -86,7 +86,7 @@ export class HttpServer {
     });
 
     // MCP capabilities endpoint (public, no auth)
-    this.app.get('/mcp/capabilities', (req: Request, res: Response) => {
+    this.app.get('/mcp/capabilities', (_req: Request, res: Response) => {
       res.json({
         name: 'musashi',
         version: '1.0.0',
@@ -251,7 +251,7 @@ export class HttpServer {
     });
 
     // 404 handler
-    this.app.use((req: Request, res: Response) => {
+    this.app.use((_req: Request, res: Response) => {
       res.status(404).json({
         error: 'Not found',
         available_endpoints: [
@@ -265,7 +265,7 @@ export class HttpServer {
     });
 
     // Error handler
-    this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    this.app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
       console.error('[HTTP] Error:', err);
 
       // Don't expose internal errors in production

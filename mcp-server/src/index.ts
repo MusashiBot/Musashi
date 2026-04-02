@@ -257,11 +257,11 @@ class MusashiMCPServer {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error || 'Failed to analyze text');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     if (!data.success || !data.data) {
       throw new Error('Invalid API response');
@@ -302,11 +302,11 @@ class MusashiMCPServer {
     const response = await fetch(`${API_BASE_URL}/api/markets/arbitrage?${params}`);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error || 'Failed to get arbitrage opportunities');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const opportunities = data.data.opportunities;
 
     if (opportunities.length === 0) {
@@ -343,11 +343,11 @@ class MusashiMCPServer {
     const response = await fetch(`${API_BASE_URL}/api/markets/movers?${params}`);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error || 'Failed to get market movers');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const movers = data.data.movers;
 
     if (movers.length === 0) {
@@ -385,11 +385,11 @@ class MusashiMCPServer {
     const response = await fetch(`${API_BASE_URL}/api/feed?${params}`);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error || 'Failed to get feed');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const tweets = data.data.tweets;
 
     if (tweets.length === 0) {
@@ -416,11 +416,11 @@ class MusashiMCPServer {
     const response = await fetch(`${API_BASE_URL}/api/feed/stats`);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error || 'Failed to get feed stats');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const stats = data.data;
 
     let result = `**Feed Statistics**\n\n`;
@@ -447,11 +447,11 @@ class MusashiMCPServer {
     const response = await fetch(`${API_BASE_URL}/api/feed/accounts`);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error || 'Failed to get feed accounts');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const accounts = data.data.accounts;
 
     let result = `**Tracked Twitter Accounts (${accounts.length})**\n\n`;
@@ -475,7 +475,7 @@ class MusashiMCPServer {
       throw new Error('Health check failed');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const health = data.data;
 
     let result = `**API Health Check**\n\n`;

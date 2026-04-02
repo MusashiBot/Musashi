@@ -5,7 +5,7 @@
 
 import rateLimit from 'express-rate-limit';
 import { Request } from 'express';
-import { extractApiKey } from '../transports/auth';
+import { extractApiKey } from '../transports/auth.js';
 
 /**
  * Rate limit configuration from environment variables
@@ -28,7 +28,7 @@ export const sessionRateLimiter = rateLimit({
     const apiKey = extractApiKey(req.headers.authorization);
     return apiKey || req.ip || 'anonymous';
   },
-  handler: (req, res) => {
+  handler: (_req, res) => {
     res.status(429).json({
       error: 'Rate limit exceeded. Max 10 sessions per hour.',
       retry_after_seconds: 3600,
@@ -54,7 +54,7 @@ export const messageRateLimiter = rateLimit({
     const apiKey = extractApiKey(req.headers.authorization);
     return apiKey || req.ip || 'anonymous';
   },
-  handler: (req, res) => {
+  handler: (_req, res) => {
     res.status(429).json({
       error: `Rate limit exceeded. Max ${RATE_LIMIT_PER_MINUTE} requests per minute.`,
       retry_after_seconds: 60,
@@ -76,7 +76,7 @@ export const hourlyRateLimiter = rateLimit({
     const apiKey = extractApiKey(req.headers.authorization);
     return apiKey || req.ip || 'anonymous';
   },
-  handler: (req, res) => {
+  handler: (_req, res) => {
     res.status(429).json({
       error: `Rate limit exceeded. Max ${RATE_LIMIT_PER_HOUR} requests per hour.`,
       retry_after_seconds: 3600,
@@ -98,10 +98,10 @@ class SSELimiter {
   /**
    * Check if API key can open new SSE stream
    * @param apiKey - API key
-   * @param sessionId - Session ID
+   * @param _sessionId - Session ID
    * @returns true if allowed, false if limit exceeded
    */
-  canConnect(apiKey: string, sessionId: string): boolean {
+  canConnect(apiKey: string, _sessionId: string): boolean {
     const sessions = this.connections.get(apiKey) || new Set();
     return sessions.size < this.MAX_CONCURRENT_STREAMS;
   }
