@@ -79,7 +79,7 @@ Notes:
 
 ## 4. Run Instructions
 
-From repo root (`/Users/ty/Documents/Musashi/Musashi`):
+From repo root (`../Musashi`):
 
 1. Run with mock-market labels (default):
 
