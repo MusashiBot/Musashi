@@ -8,6 +8,7 @@ import cors from 'cors';
 import { SessionManager } from './session-manager.js';
 import { sessionRateLimiter, messageRateLimiter, hourlyRateLimiter, sseLimiter } from './rate-limiter.js';
 import { verifyApiKey, extractApiKey } from '../transports/auth.js';
+import { handleOAuthDiscovery, handleOAuthAuthorize, handleOAuthToken } from './oauth-handler.js';
 
 export interface HttpServerOptions {
   port: number;
@@ -60,6 +61,9 @@ export class HttpServer {
     // JSON body parsing
     this.app.use(express.json());
 
+    // URL-encoded body parsing (for OAuth form submissions)
+    this.app.use(express.urlencoded({ extended: true }));
+
     // Request logging
     this.app.use((req: Request, _res: Response, next: NextFunction) => {
       console.log(`[HTTP] ${req.method} ${req.path} - ${req.ip}`);
@@ -104,6 +108,16 @@ export class HttpServer {
         },
       });
     });
+
+    // OAuth Discovery endpoint (required for claude.ai)
+    this.app.get('/.well-known/oauth-authorization-server', handleOAuthDiscovery);
+
+    // OAuth Authorization endpoints (GET shows form, POST processes it)
+    this.app.get('/oauth/authorize', handleOAuthAuthorize);
+    this.app.post('/oauth/authorize', handleOAuthAuthorize);
+
+    // OAuth Token exchange endpoint
+    this.app.post('/oauth/token', handleOAuthToken);
 
     // Authentication middleware for protected routes
     const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
