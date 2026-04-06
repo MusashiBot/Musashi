@@ -1,8 +1,12 @@
 // Keyword-based market matcher
 // Uses word-boundary matching, synonym expansion, phrase extraction, and entity detection
+// IMPROVED: Now with context-aware scoring to understand tweet relevance
 
 import { Market, MarketMatch } from '../types/market';
 import { extractEntities, isEntity, ExtractedEntities } from './entity-extractor';
+import { analyzeContext, isCasualMention } from './context-scorer';
+import { extractMeaningfulPhrases, scorePhraseImportance } from './phrase-detector';
+import { getCategoryPriorityBoost, getEffectiveThreshold } from '../data/category-priority';
 
 // ─── Stop words ──────────────────────────────────────────────────────────────
 
@@ -187,6 +191,26 @@ export const SYNONYM_MAP: Record<string, string[]> = {
   'agi':              ['artificial general intelligence', 'ai'],
   'sam altman':       ['openai', 'ai', 'chatgpt'],
   'altman':           ['openai', 'ai', 'chatgpt'],
+
+  // AI Agents (HIGH PRIORITY - user wants more matches)
+  'agents':           ['ai', 'ai agents', 'autonomous', 'agentic', 'artificial intelligence'],
+  'ai agents':        ['agents', 'autonomous agents', 'ai', 'agentic', 'multi-agent'],
+  'ai agent':         ['agents', 'ai agents', 'autonomous', 'agentic', 'ai'],
+  'autonomous':       ['agents', 'ai agents', 'agentic', 'ai', 'automation'],
+  'autonomous agents':['agents', 'ai agents', 'agentic', 'ai', 'multi-agent'],
+  'agentic':          ['agents', 'ai agents', 'autonomous', 'ai', 'agent framework'],
+  'multi-agent':      ['agents', 'ai agents', 'autonomous', 'agentic', 'ai'],
+  'multi agent':      ['multi-agent', 'agents', 'ai agents', 'agentic'],
+  'agent framework':  ['agents', 'ai agents', 'agentic', 'ai', 'autonomous'],
+  'swarm':            ['multi-agent', 'agents', 'ai agents', 'autonomous', 'ai'],
+  'ai swarm':         ['swarm', 'multi-agent', 'agents', 'ai agents', 'ai'],
+  'reasoning':        ['ai', 'llm', 'artificial intelligence', 'agents'],
+  'planning':         ['ai', 'agents', 'agentic', 'autonomous'],
+  'tool use':         ['ai', 'agents', 'llm', 'function calling'],
+  'function calling': ['ai', 'agents', 'llm', 'tool use'],
+  'langchain':        ['ai', 'agents', 'llm', 'ai framework'],
+  'autogen':          ['ai', 'agents', 'microsoft', 'multi-agent'],
+  'crewai':           ['ai', 'agents', 'multi-agent', 'autonomous'],
   'jensen huang':     ['nvidia', 'nvda', 'gpu', 'ai chips'],
   'huang':            ['nvidia', 'nvda', 'gpu'],
   'nvda':             ['nvidia'],
@@ -1028,7 +1052,7 @@ export class KeywordMatcher {
 
   constructor(
     markets: Market[] = [],
-    minConfidence: number = 0.22, // Raised from 0.12 to reduce false positives
+    minConfidence: number = 0.15, // Balanced threshold - not too strict, not too loose
     maxResults: number = 5
   ) {
     this.markets = markets;
@@ -1038,39 +1062,72 @@ export class KeywordMatcher {
 
   /**
    * Match a tweet to relevant markets, returning results sorted by confidence.
+   * IMPROVED: Now filters out casual mentions and applies context scoring
    */
   public match(tweetText: string): MarketMatch[] {
+    console.log(`[Matcher] Analyzing tweet: "${tweetText.slice(0, 60)}..."`);
+
     // Filter out very short tweets (likely noise or greetings)
-    if (tweetText.trim().length < 20) return [];
+    if (tweetText.trim().length < 20) {
+      console.log('[Matcher] Tweet too short, skipping');
+      return [];
+    }
+
+    // Filter out promotional content
+    if (isPromotionalContent(tweetText)) {
+      console.log('[Matcher] Filtered promotional content');
+      return [];
+    }
 
     // Step 1: Extract entities (people, tickers, organizations, dates)
     const entities = extractEntities(tweetText);
+    console.log('[Matcher] Entities:', entities.all);
 
     // Step 2: Extract raw tokens (unigrams + bigrams + trigrams) from tweet
     const rawTokens = this.extractKeywords(tweetText);
+    console.log('[Matcher] Extracted', rawTokens.length, 'tokens:', rawTokens.slice(0, 10));
     if (rawTokens.length === 0) return [];
 
     // Step 3: Expand with synonyms — done once, reused for all markets
     const expandedTokens  = expandWithSynonyms(rawTokens);
     const rawTokenSet      = new Set(rawTokens);
     const expandedTokenSet = new Set(expandedTokens);
+    console.log('[Matcher] After synonym expansion:', expandedTokens.length, 'tokens');
 
     const matches: MarketMatch[] = [];
+    let candidateCount = 0;
 
     for (const market of this.markets) {
-      const result = this.scoreMarket(market, rawTokenSet, expandedTokenSet, entities);
-      if (result.confidence >= this.minConfidence) {
-        matches.push(result);
+      const result = this.scoreMarket(market, rawTokenSet, expandedTokenSet, entities, tweetText);
+
+      // PRIORITY: High-priority categories (AI/crypto/tech) have lower threshold
+      const effectiveThreshold = getEffectiveThreshold(market, this.minConfidence);
+
+      if (result.confidence >= effectiveThreshold) {
+        candidateCount++;
+
+        // IMPROVED: Filter out casual mentions
+        if (isCasualMention(tweetText, result.matchedKeywords)) {
+          console.log(`[Matcher] Filtered casual mention: ${market.title.slice(0, 40)} (${result.confidence.toFixed(3)})`);
+        } else {
+          matches.push(result);
+        }
       }
     }
 
+    console.log(`[Matcher] Found ${candidateCount} candidates above threshold (${this.minConfidence}), ${matches.length} after filtering`);
+
     matches.sort((a, b) => b.confidence - a.confidence);
-    return matches.slice(0, this.maxResults);
+    const results = matches.slice(0, this.maxResults);
+    console.log(`[Matcher] Returning ${results.length} matches`);
+
+    return results;
   }
 
   /**
    * Extract and clean keywords from tweet text.
    * Returns unigrams + bigrams + trigrams, filtered for noise.
+   * IMPROVED: Now also extracts meaningful phrases dynamically
    */
   private extractKeywords(text: string): string[] {
     let normalized = text.toLowerCase();
@@ -1089,6 +1146,9 @@ export class KeywordMatcher {
     // Generate unigrams + bigrams + trigrams
     const phrases = extractPhrases(normalized);
 
+    // IMPROVED: Extract meaningful phrases using dynamic detection
+    const meaningfulPhrases = extractMeaningfulPhrases(text);
+
     // Filter: single tokens must pass stop-word + noise-word checks
     const filtered = phrases.filter(token => {
       if (token.includes(' ')) {
@@ -1102,18 +1162,20 @@ export class KeywordMatcher {
       );
     });
 
-    // Merge with hashtags and deduplicate
-    return [...new Set([...filtered, ...hashtags])];
+    // Merge with hashtags, meaningful phrases, and deduplicate
+    return [...new Set([...filtered, ...hashtags, ...meaningfulPhrases])];
   }
 
   /**
    * Score a single market against the pre-computed tweet token sets.
+   * IMPROVED: Now includes context scoring
    */
   private scoreMarket(
     market: Market,
     rawTokenSet: Set<string>,
     expandedTokenSet: Set<string>,
-    entities: ExtractedEntities
+    entities: ExtractedEntities,
+    tweetText: string
   ): MarketMatch {
     const matchedKeywords: string[] = [];
     let exactMatches   = 0;
@@ -1188,7 +1250,7 @@ export class KeywordMatcher {
       }
     }
 
-    const confidence = computeScore({
+    let confidence = computeScore({
       exactMatches,
       synonymMatches,
       titleMatches,
@@ -1196,6 +1258,29 @@ export class KeywordMatcher {
       totalChecked: explicitKeywords.length,
       multiWordMatches,
     }, market, matchedKeywords);
+
+    // IMPROVED: Apply context score boost (additive, not multiplicative)
+    // Context score ranges 0-1, where higher means tweet is more likely ABOUT the market
+    // We ADD a bonus for good context instead of MULTIPLYING (which was too punishing)
+    const contextScore = analyzeContext(tweetText, market);
+    const contextBonus = (contextScore - 0.5) * 0.15; // Ranges from -0.075 to +0.075
+    confidence = confidence + contextBonus;
+
+    // PRIORITY BOOST: Tech/AI/Crypto markets get significant boost
+    // User wants these topics matched MORE aggressively
+    const categoryBoost = getCategoryPriorityBoost(market);
+    confidence = confidence + categoryBoost;
+
+    // Cap between 0 and 1
+    confidence = Math.min(1.0, Math.max(0, confidence));
+
+    // Debug logging
+    if (confidence >= 0.1) {
+      const boosts = [];
+      if (contextBonus !== 0) boosts.push(`context: ${contextBonus >= 0 ? '+' : ''}${contextBonus.toFixed(3)}`);
+      if (categoryBoost > 0) boosts.push(`category: +${categoryBoost.toFixed(3)}`);
+      console.log(`[Matcher] "${tweetText.slice(0, 50)}..." → ${market.title.slice(0, 40)}: ${confidence.toFixed(3)} ${boosts.length > 0 ? '(' + boosts.join(', ') + ')' : ''}`);
+    }
 
     return { market, confidence, matchedKeywords };
   }

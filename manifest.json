@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Musashi",
-  "version": "2.0.0",
-  "description": "AI-powered prediction market intelligence for Twitter/X - Polymarket & Kalshi signals",
+  "version": "2.2.0",
+  "description": "AI-powered prediction market intelligence - Smart matching for tech, AI, crypto & politics",
   "permissions": [
     "storage",
     "activeTab",

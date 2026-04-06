@@ -43,6 +43,7 @@ const NEGATIONS = [
 
 /**
  * Analyze tweet text and return sentiment
+ * IMPROVED: Better negation detection, context windows, phrase matching
  */
 export function analyzeSentiment(tweetText: string): SentimentResult {
   const text = tweetText.toLowerCase();
@@ -53,10 +54,13 @@ export function analyzeSentiment(tweetText: string): SentimentResult {
 
   for (let i = 0; i < words.length; i++) {
     const word = words[i].replace(/[^a-z]/g, '');
-    const prevWord = i > 0 ? words[i - 1].replace(/[^a-z]/g, '') : '';
 
-    // Check for negation
-    const isNegated = NEGATIONS.includes(prevWord);
+    // IMPROVED: Check 2-word window for negations (not just previous word)
+    const prevWord = i > 0 ? words[i - 1].replace(/[^a-z]/g, '') : '';
+    const prevPrevWord = i > 1 ? words[i - 2].replace(/[^a-z]/g, '') : '';
+
+    // Check for negation in 2-word window
+    const isNegated = NEGATIONS.includes(prevWord) || NEGATIONS.includes(prevPrevWord);
 
     // Check for strong modifier
     const isStrong = STRONG_MODIFIERS.includes(prevWord);
@@ -81,6 +85,11 @@ export function analyzeSentiment(tweetText: string): SentimentResult {
     }
   }
 
+  // IMPROVED: Check for phrase-level sentiment patterns
+  const phraseAdjustment = analyzeSentimentPhrases(text);
+  bullishScore += phraseAdjustment.bullish;
+  bearishScore += phraseAdjustment.bearish;
+
   // Calculate total and determine sentiment
   const total = bullishScore + bearishScore;
 
@@ -102,4 +111,55 @@ export function analyzeSentiment(tweetText: string): SentimentResult {
 
   // Mixed or weak signal
   return { sentiment: 'neutral', confidence: 1 - Math.abs(bullishRatio - bearishRatio) };
+}
+
+/**
+ * IMPROVED: Detect sentiment from multi-word phrases
+ * Catches patterns like "not going to happen", "this will definitely", etc.
+ */
+function analyzeSentimentPhrases(text: string): { bullish: number; bearish: number } {
+  let bullish = 0;
+  let bearish = 0;
+
+  // Strong bullish phrases
+  const strongBullishPhrases = [
+    'this will happen', 'going to happen', 'will definitely', 'no doubt',
+    'calling it now', 'mark my words', 'all in', 'to the moon',
+    'this is happening', 'it\'s happening', 'let\'s go', 'lfg',
+  ];
+
+  // Strong bearish phrases
+  const strongBearishPhrases = [
+    'not going to happen', 'won\'t happen', 'no way', 'never happening',
+    'this won\'t', 'not a chance', 'impossible', 'ain\'t happening',
+    'will never', 'zero chance', 'no shot',
+  ];
+
+  // Uncertainty phrases (reduce both)
+  const uncertaintyPhrases = [
+    'who knows', 'maybe', 'possibly', 'hard to say', 'unclear',
+    'not sure', 'uncertain', 'could go either way',
+  ];
+
+  for (const phrase of strongBullishPhrases) {
+    if (text.includes(phrase)) {
+      bullish += 1.5;
+    }
+  }
+
+  for (const phrase of strongBearishPhrases) {
+    if (text.includes(phrase)) {
+      bearish += 1.5;
+    }
+  }
+
+  // Uncertainty reduces confidence in both directions
+  for (const phrase of uncertaintyPhrases) {
+    if (text.includes(phrase)) {
+      bullish -= 0.5;
+      bearish -= 0.5;
+    }
+  }
+
+  return { bullish: Math.max(0, bullish), bearish: Math.max(0, bearish) };
 }
